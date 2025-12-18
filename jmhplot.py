@@ -265,7 +265,7 @@ def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, p
 
     plt.title(
         f'{str(indexKeys)}={str(indexTuple)} include={include_benchmarks} exclude={exclude_benchmarks}')
-    plt.xlabel("X")
+    plt.xlabel("# Operations")
     plt.ylabel("t (ns)")
     plt.legend(loc='lower right')
     plt.grid(b='True', which='both')
