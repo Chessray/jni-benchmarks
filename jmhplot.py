@@ -257,8 +257,15 @@ def plot_result_axis_bars(ax, resultSet: ResultSet) -> None:
 
 
 def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, path: pathlib.Path, include_benchmarks: str, exclude_benchmarks: str, label: str):
-    # Add this line to use a 20-color palette
-    plt.rc('axes', prop_cycle=plt.cycler('color', plt.cm.berlin.colors))
+    # Determine how many colors we need
+    num_benchmarks = len(resultSet)
+
+    # Sample gist_ncar (or nipy_spectral) at discrete intervals
+    cmap = plt.get_cmap('gist_ncar')
+    colors = [cmap(i / num_benchmarks) for i in range(num_benchmarks)]
+
+    # Set the property cycle with these colors
+    plt.rc('axes', prop_cycle=plt.cycler('color', colors))
 
     fig = plt.figure(num=None, figsize=(18, 12), dpi=80,
                      facecolor='w', edgecolor='k')
