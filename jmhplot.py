@@ -257,6 +257,9 @@ def plot_result_axis_bars(ax, resultSet: ResultSet) -> None:
 
 
 def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, path: pathlib.Path, include_benchmarks: str, exclude_benchmarks: str, label: str):
+    # Add this line to use a 20-color palette
+    plt.rc('axes', prop_cycle=plt.cycler('color', plt.cm.berlin.colors))
+
     fig = plt.figure(num=None, figsize=(18, 12), dpi=80,
                      facecolor='w', edgecolor='k')
     ax = plt.subplot()
