@@ -116,8 +116,8 @@ def normalize_data_frame_from_path(path: pathlib.Path):
         except pd.errors.EmptyDataError:
             break
 
-        # every 9th line is the interesting one, discard the rest
-        df = df.iloc[::9, :]
+        # df = df.iloc[::9, :]
+        df = df[~df['Benchmark'].str.contains(':')]
         df["Benchmark"] = df["Benchmark"].apply(lambda x: x.split('.')[-1])
         if normalized is None:
             normalized = df
