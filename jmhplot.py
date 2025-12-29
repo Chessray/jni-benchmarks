@@ -273,7 +273,7 @@ def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, p
 
     plot_result_axis_bars(ax, resultSet)
 
-    plt.suptitle("x86_64 - Xeon E5-1650 v3 @ 3.50GHz - 128GB ECC RAM - Ubuntu 24.04.3 LTS")
+    plt.suptitle("x86_64 - Xeon E5-1650 v3 @ 3.50GHz - 128GB ECC RAM - Ubuntu 24.04.3 LTS - Kernel: 6.14.0-36-generic")
     plt.title(
         f'{str(indexKeys)}={str(indexTuple)} include={include_benchmarks} exclude={exclude_benchmarks}')
     plt.xlabel("# Operations")
