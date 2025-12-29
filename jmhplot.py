@@ -285,7 +285,7 @@ def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, p
 
     if path.is_file():
         path = path.parent()
-    fig.savefig(path.joinpath(name))
+    fig.savefig(path.joinpath(name), bbox_inches='tight')
 
 
 alpha_pattern = re.compile(f'[A-Za-z0-9_\-+]')
