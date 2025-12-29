@@ -273,11 +273,12 @@ def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, p
 
     plot_result_axis_bars(ax, resultSet)
 
+    plt.suptitle("x86_64 - Xeon E5-1650 v3 @ 3.50GHz - 128GB ECC RAM - Ubuntu 24.04.3 LTS")
     plt.title(
         f'{str(indexKeys)}={str(indexTuple)} include={include_benchmarks} exclude={exclude_benchmarks}')
     plt.xlabel("# Operations")
     plt.ylabel("t (ns)")
-    plt.legend(loc='lower right')
+    plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
     plt.grid(b='True', which='both')
 
     name = f'fig_{"_".join([str(t) for t in indexTuple])}_{label}.png'
