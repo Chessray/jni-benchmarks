@@ -279,7 +279,7 @@ def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, p
     plt.xlabel("# Operations")
     plt.ylabel("t (ns)")
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
-    plt.grid(b='True', which='both')
+    plt.grid(visible='True', which='both')
 
     name = f'fig_{"_".join([str(t) for t in indexTuple])}_{label}.png'
 
