@@ -282,11 +282,12 @@ public class GetJNIBenchmark {
     final var segment = threadState.memorySegmentCache.acquire();
 
     try {
-      GET_INTO_MEMORY_SEGMENT_HANDLE.invokeExact(
+      final var size = (int) GET_INTO_MEMORY_SEGMENT_HANDLE.invokeExact(
           benchmarkState.keyMemorySegment, // Pre-allocated segment for key
           segment,
           benchmarkState.valueSize
       );
+      blackhole.consume(size);
     } catch (Throwable e) {
       throw new RuntimeException(e);
     }
