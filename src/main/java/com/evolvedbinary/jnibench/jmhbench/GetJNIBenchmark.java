@@ -26,9 +26,6 @@
  */
 package com.evolvedbinary.jnibench.jmhbench;
 
-import static java.lang.foreign.ValueLayout.ADDRESS;
-import static java.lang.foreign.ValueLayout.JAVA_INT;
-
 import com.evolvedbinary.jnibench.common.getputjni.GetPutJNI;
 import com.evolvedbinary.jnibench.consbench.NarSystem;
 import com.evolvedbinary.jnibench.jmhbench.cache.AllocationCache;
@@ -44,6 +41,9 @@ import io.netty.buffer.PooledByteBufAllocator;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
 import java.lang.foreign.MemorySegment;
+import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
+import java.lang.invoke.MethodHandle;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -79,8 +79,24 @@ public class GetJNIBenchmark {
 
   private static final Logger LOG = Logger.getLogger(GetJNIBenchmark.class.getName());
 
+  private static final MethodHandle GET_INTO_MEMORY_SEGMENT_HANDLE;
+
   static {
     NarSystem.loadLibrary();
+
+// 2. Initialize the Linker and Lookup
+    Linker linker = Linker.nativeLinker();
+    SymbolLookup loaderLookup = SymbolLookup.loaderLookup();
+
+    // 3. Find the symbol and create the Downcall Handle once
+    GET_INTO_MEMORY_SEGMENT_HANDLE = loaderLookup.find("getIntoMemorySegment")
+                                                 .map(symbol -> linker.downcallHandle(symbol,
+                                                                                      FunctionDescriptor.of(
+                                                                                          ValueLayout.JAVA_INT,
+                                                                                          ValueLayout.ADDRESS,
+                                                                                          ValueLayout.ADDRESS,
+                                                                                          ValueLayout.JAVA_INT)))
+                                                 .orElseThrow();
   }
 
   @State(Scope.Benchmark)
@@ -264,15 +280,9 @@ public class GetJNIBenchmark {
   public void getIntoMemorySegment(GetJNIBenchmarkState benchmarkState, GetJNIThreadState threadState,
                                    Blackhole blackhole) {
     final var segment = threadState.memorySegmentCache.acquire();
-    final var linker = Linker.nativeLinker();
-    final var symbol = linker.defaultLookup()
-                             .find("getIntoMemorySegment")
-                             .orElseThrow();
-    final var methodHandle = linker.downcallHandle(symbol, FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT));
 
-    // Call via Panama MethodHandle
     try {
-      methodHandle.invokeExact(
+      GET_INTO_MEMORY_SEGMENT_HANDLE.invokeExact(
           benchmarkState.keyMemorySegment, // Pre-allocated segment for key
           segment,
           benchmarkState.valueSize
