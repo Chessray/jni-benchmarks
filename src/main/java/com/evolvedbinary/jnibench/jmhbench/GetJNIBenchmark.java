@@ -38,6 +38,7 @@ import com.evolvedbinary.jnibench.jmhbench.cache.UnsafeBufferCache;
 import com.evolvedbinary.jnibench.jmhbench.common.JMHCaller;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
+import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
 import java.lang.foreign.MemorySegment;
@@ -128,25 +129,28 @@ public class GetJNIBenchmark {
 
     String keyBase;
     byte[] keyBytes;
-    private MemorySegment keyMemorySegment;
+    private Arena arena;
 
     JMHCaller caller;
 
     @Setup
     public void setup() {
       this.caller = JMHCaller.fromStack();
+      arena = Arena.ofShared();
 
       keyBase = "testKeyWithReturnValueSize" + String.format("%07d", valueSize) + "Bytes";
 
       keyBytes = keyBase.getBytes();
-      keyMemorySegment = MemorySegment.ofArray(keyBytes);
+      arena.allocateArray(ValueLayout.JAVA_BYTE, keyBytes);
 
       readChecksum = AllocationCache.Checksum.valueOf(checksum);
     }
 
     @TearDown
     public void tearDown() {
-
+      if (arena != null) {
+        arena.close();
+      }
     }
   }
 
