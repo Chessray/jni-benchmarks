@@ -187,8 +187,8 @@ public class GetJNIBenchmark {
                                blackhole);
           break;
         case "getIntoMemorySegment":
-          memorySegmentCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead, ,
-                                   benchmarkState.readChecksum, blackhole);
+          memorySegmentCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead, benchmarkState.readChecksum,
+                                   blackhole);
           break;
         default:
           throw new RuntimeException(
