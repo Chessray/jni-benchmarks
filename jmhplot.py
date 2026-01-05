@@ -193,11 +193,11 @@ def tuple_of_secondary_keys(params: BMParams) -> Tuple:
     return tuple(secondaryKeys)
 
 
-def plot_all_results(params: BMParams, resultSets: ResultSets, path, include_benchmarks: str, exclude_benchmarks: str, label: str, subselection: str) -> None:
+def plot_all_results(params: BMParams, resultSets: ResultSets, path, include_benchmarks: str, exclude_benchmarks: str, label: str, subselection: str, system_info: str) -> None:
     indexKeys = tuple_of_secondary_keys(params)
     for indexTuple, resultSet in resultSets.items():
         plot_result_set(indexKeys, indexTuple, resultSet,
-                        path, include_benchmarks, exclude_benchmarks, label, subselection)
+                        path, include_benchmarks, exclude_benchmarks, label, subselection, system_info)
 
 
 def plot_result_axis_errorbars(ax, resultSet: ResultSet) -> None:
@@ -256,77 +256,7 @@ def plot_result_axis_bars(ax, resultSet: ResultSet) -> None:
         bmIndex = bmIndex + 1
 
 
-def get_system_info() -> str:
-    try:
-        import platform
-        import subprocess
-
-        arch = platform.machine()
-        system = platform.system()
-        kernel = platform.release()
-
-        cpu_model = ""
-        ram_info = ""
-        os_info = ""
-
-        if system == "Darwin":
-            try:
-                cpu_model = subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string']).decode().strip()
-            except Exception:
-                cpu_model = platform.processor()
-
-            try:
-                mem_bytes = int(subprocess.check_output(['sysctl', '-n', 'hw.memsize']).decode().strip())
-                ram_info = f"{mem_bytes // (1024**3)}GB RAM"
-            except Exception:
-                ram_info = "Unknown RAM"
-
-            os_info = f"macOS {platform.mac_ver()[0]}"
-
-        elif system == "Linux":
-            try:
-                with open("/proc/cpuinfo", "r") as f:
-                    for line in f:
-                        if "model name" in line:
-                            cpu_model = line.split(":")[1].strip()
-                            break
-            except Exception:
-                cpu_model = platform.processor()
-
-            try:
-                with open("/proc/meminfo", "r") as f:
-                    for line in f:
-                        if "MemTotal" in line:
-                            mem_kb = int(line.split(":")[1].strip().split()[0])
-                            ram_info = f"{mem_kb // (1024**2)}GB RAM"
-                            break
-            except Exception:
-                ram_info = "Unknown RAM"
-
-            try:
-                import lsb_release
-                os_info = lsb_release.get_distro_information()['DESCRIPTION']
-            except Exception:
-                try:
-                    with open("/etc/os-release", "r") as f:
-                        for line in f:
-                            if line.startswith("PRETTY_NAME="):
-                                os_info = line.split("=")[1].strip().strip('"')
-                                break
-                except Exception:
-                    os_info = f"Linux {platform.release()}"
-
-        else:
-            cpu_model = platform.processor()
-            os_info = f"{system} {platform.release()}"
-
-        return f"{arch} - {cpu_model} - {ram_info} - {os_info} - Kernel: {kernel}"
-
-    except Exception as e:
-        return f"Unknown System - {str(e)}"
-
-
-def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, path: pathlib.Path, include_benchmarks: str, exclude_benchmarks: str, label: str, subselection: str):
+def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, path: pathlib.Path, include_benchmarks: str, exclude_benchmarks: str, label: str, subselection: str, system_info: str):
     # Determine how many colors we need
     num_benchmarks = len(resultSet)
 
@@ -343,7 +273,7 @@ def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, p
 
     plot_result_axis_bars(ax, resultSet)
 
-    plt.suptitle(get_system_info())
+    plt.suptitle(system_info)
     title = f'{str(indexKeys)}={str(indexTuple)} include={include_benchmarks} exclude={exclude_benchmarks} subselection={subselection}'
     plt.title(title)
     plt.xlabel("# Operations")
@@ -354,7 +284,7 @@ def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, p
     name = f'fig_{"_".join([str(t) for t in indexTuple])}_{label}.png'
 
     if path.is_file():
-        path = path.parent()
+        path = path.parent
     fig.savefig(path.joinpath(name), bbox_inches='tight')
 
 
@@ -420,6 +350,25 @@ def process_some_plots(path: pathlib.Path, plot: Dict) -> None:
     label = required('label', plot)
     subselection = optional('subselection', plot)
 
+    # Check for system_info.json in the path
+    system_info = None
+    system_info_file = None
+    if path.is_dir():
+        system_info_file = path.joinpath('system_info.json')
+    if path.is_file():
+        system_info_file = path.parent.joinpath('system_info.json')
+
+    if system_info_file and system_info_file.exists():
+        try:
+            with system_info_file.open(mode='r', encoding='UTF-8') as f:
+                info_json = json.load(f)
+                system_info = info_json.get('system_info')
+        except Exception:
+            pass
+
+    if system_info is None:
+        system_info = "System Info unavailable"
+
     dataframe = normalize_data_frame_from_path(path)
     if len(dataframe) == 0:
         raise RunnerError(
@@ -440,7 +389,7 @@ def process_some_plots(path: pathlib.Path, plot: Dict) -> None:
         extract_params(dataframe), primary_param_name)
     resultSets = extract_results_per_param(dataframe, params)
     plot_all_results(params, resultSets, path,
-                     include_benchmarks, exclude_benchmarks, label, subselection)
+                     include_benchmarks, exclude_benchmarks, label, subselection, system_info)
 
 
 def process_benchmarks(config: Dict) -> None:

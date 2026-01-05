@@ -32,6 +32,7 @@ from json.decoder import JSONDecodeError
 import pathlib
 import json
 import subprocess
+import platform
 from typing import Dict
 
 
@@ -110,6 +111,81 @@ def output_log_file(config: Dict):
 def output_options(config: Dict) -> list:
     path = output_dir_path(config)
     return ['-rff', str(path.joinpath(pathlib.Path(f'jmh_{const_datetime_str}.csv')))]
+
+
+def get_system_info() -> str:
+    try:
+        arch = platform.machine()
+        system = platform.system()
+        kernel = platform.release()
+
+        cpu_model = ""
+        ram_info = ""
+        os_info = ""
+        java_info = ""
+
+        try:
+            java_version_out = subprocess.check_output(['java', '-version'], stderr=subprocess.STDOUT).decode().strip()
+            # The first line usually contains the version information
+            java_info = java_version_out.splitlines()[0]
+        except Exception:
+            java_info = "Unknown Java"
+
+        if system == "Darwin":
+            try:
+                cpu_model = subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string']).decode().strip()
+            except Exception:
+                cpu_model = platform.processor()
+
+            try:
+                mem_bytes = int(subprocess.check_output(['sysctl', '-n', 'hw.memsize']).decode().strip())
+                ram_info = f"{mem_bytes // (1024**3)}GB RAM"
+            except Exception:
+                ram_info = "Unknown RAM"
+
+            os_info = f"macOS {platform.mac_ver()[0]}"
+
+        elif system == "Linux":
+            try:
+                with open("/proc/cpuinfo", "r") as f:
+                    for line in f:
+                        if "model name" in line:
+                            cpu_model = line.split(":")[1].strip()
+                            break
+            except Exception:
+                cpu_model = platform.processor()
+
+            try:
+                with open("/proc/meminfo", "r") as f:
+                    for line in f:
+                        if "MemTotal" in line:
+                            mem_kb = int(line.split(":")[1].strip().split()[0])
+                            ram_info = f"{mem_kb // (1024**2)}GB RAM"
+                            break
+            except Exception:
+                ram_info = "Unknown RAM"
+
+            try:
+                import lsb_release
+                os_info = lsb_release.get_distro_information()['DESCRIPTION']
+            except Exception:
+                try:
+                    with open("/etc/os-release", "r") as f:
+                        for line in f:
+                            if line.startswith("PRETTY_NAME="):
+                                os_info = line.split("=")[1].strip().strip('"')
+                                break
+                except Exception:
+                    os_info = f"Linux {platform.release()}"
+
+        else:
+            cpu_model = platform.processor()
+            os_info = f"{system} {platform.release()}"
+
+        return f"{arch} - {cpu_model} - {ram_info} - {os_info} - Kernel: {kernel} - {java_info}"
+
+    except Exception as e:
+        return f"Unknown System - {str(e)}"
 
 
 def build_jmh_command(config: Dict) -> list:
@@ -191,6 +267,11 @@ def log_jmh_session(cmd: list, config: Dict, config_file: str):
         log.write('\n')
         log.writelines(line + '\n' for line in
                        ['```', '#### Command', 'The java command executed to run the tests', '```', ' '.join(cmd), '```'])
+
+    # Save system info
+    system_info_file = output_dir_path(config).joinpath('system_info.json')
+    with system_info_file.open(mode='w', encoding='UTF-8') as f:
+        json.dump({"system_info": get_system_info()}, f, indent=4)
 
 
 def exec_jmh_cmd(cmd: list, help_requested):
