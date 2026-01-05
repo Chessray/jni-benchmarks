@@ -384,6 +384,12 @@ extern "C" int getIntoMemorySegment(const char* key, char* dest, int dest_len) {
     return size;
 }
 
+extern "C" int putFromMemorySegment(const char* key, const char* src, int src_len) {
+    char *db_buf = GetByteArrayInternalForWrite(key, src_len);
+    memcpy(db_buf, src, src_len);
+    return src_len;
+}
+
 /*
  * Class:     com_evolvedbinary_jnibench_common_getputjni_GetPutJNI
  * Method:    putFromIndirectByteBufferGetRegion

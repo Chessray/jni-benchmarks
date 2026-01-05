@@ -30,20 +30,26 @@ import com.evolvedbinary.jnibench.common.getputjni.GetPutJNI;
 import com.evolvedbinary.jnibench.consbench.NarSystem;
 import com.evolvedbinary.jnibench.jmhbench.cache.*;
 import com.evolvedbinary.jnibench.jmhbench.common.*;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
+import java.lang.foreign.Arena;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
+import java.lang.invoke.MethodHandle;
+import java.nio.ByteBuffer;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 import org.openjdk.jmh.runner.Runner;
 import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
-import io.netty.buffer.ByteBuf;
-
-import java.nio.ByteBuffer;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
 
 /**
  * Benchmark getting byte arrays from native methods.
@@ -58,8 +64,24 @@ public class PutJNIBenchmark {
 
     private static final Logger LOG = Logger.getLogger(GetJNIBenchmark.class.getName());
 
+    private static final MethodHandle PUT_FROM_MEMORY_SEGMENT_HANDLE;
+
     static {
         NarSystem.loadLibrary();
+
+        // 2. Initialize the Linker and Lookup
+        Linker linker = Linker.nativeLinker();
+        SymbolLookup loaderLookup = SymbolLookup.loaderLookup();
+
+        // 3. Find the symbol and create the Downcall Handle once
+        PUT_FROM_MEMORY_SEGMENT_HANDLE = loaderLookup.find("putFromMemorySegment")
+                .map(symbol -> linker.downcallHandle(symbol,
+                        FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_INT)))
+                .orElseThrow();
     }
 
     @State(Scope.Benchmark)
@@ -90,6 +112,8 @@ public class PutJNIBenchmark {
 
         String keyBase;
         byte[] keyBytes;
+        MemorySegment keyMemorySegment;
+        private Arena benchmarkArena;
 
         JMHCaller caller;
 
@@ -99,14 +123,19 @@ public class PutJNIBenchmark {
 
             keyBase = "testKeyWithReturnValueSize" + String.format("%07d", valueSize) + "Bytes";
 
+            benchmarkArena = Arena.ofShared();
+
             keyBytes = keyBase.getBytes();
+            keyMemorySegment = benchmarkArena.allocateArray(ValueLayout.JAVA_BYTE, keyBytes);
 
             writePreparation = AllocationCache.Prepare.valueOf(preparation);
         }
 
         @TearDown
         public void tearDown() {
-
+            if (benchmarkArena != null) {
+                benchmarkArena.close();
+            }
         }
     }
 
@@ -117,6 +146,7 @@ public class PutJNIBenchmark {
         private final UnsafeBufferCache unsafeBufferCache = new UnsafeBufferCache();
         private final ByteArrayCache byteArrayCache = new ByteArrayCache();
         private final IndirectByteBufferCache indirectByteBufferCache = new IndirectByteBufferCache();
+        private final MemorySegmentCache memorySegmentCache = new MemorySegmentCache();
         private final PooledByteBufAllocator pooledByteBufAllocator = PooledByteBufAllocator.DEFAULT;
         private final NettyByteBufCache nettyByteBufCache = new NettyByteBufCache();
 
@@ -152,6 +182,9 @@ public class PutJNIBenchmark {
                 case "putFromByteArrayCritical":
                     byteArrayCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead, benchmarkState.writePreparation, blackhole);
                     break;
+                case "putFromMemorySegment":
+                    memorySegmentCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead, benchmarkState.writePreparation, blackhole);
+                    break;
                 default:
                     throw new RuntimeException("Don't know how to setup() for benchmark: " + benchmarkState.caller.benchmarkMethod);
             }
@@ -184,6 +217,9 @@ public class PutJNIBenchmark {
                 case "putFromByteArrayCritical":
                     byteArrayCache.tearDown();
                     break;
+                case "putFromMemorySegment":
+                    memorySegmentCache.tearDown();
+                    break;
                 default:
                     throw new RuntimeException("Don't know how to tearDown() for benchmark: " + benchmarkState.caller.benchmarkMethod);
             }
@@ -194,6 +230,26 @@ public class PutJNIBenchmark {
     public void buffersOnlyDirectByteBufferFromUnsafe(GetJNIThreadState threadState) {
         UnsafeBufferCache.UnsafeBuffer unsafeBuffer = threadState.unsafeBufferCache.acquire();
         threadState.unsafeBufferCache.release(unsafeBuffer);
+    }
+
+    @Benchmark
+    public void putFromMemorySegment(GetJNIBenchmarkState benchmarkState, GetJNIThreadState threadState,
+                                     Blackhole blackhole) {
+        final var segment = threadState.memorySegmentCache.acquire();
+        threadState.memorySegmentCache.prepareBuffer(segment, benchmarkState.fillByte);
+
+        try {
+            final var size = (int) PUT_FROM_MEMORY_SEGMENT_HANDLE.invokeExact(
+                    benchmarkState.keyMemorySegment, // Pre-allocated segment for key
+                    segment,
+                    benchmarkState.valueSize
+            );
+            blackhole.consume(size);
+        } catch (Throwable e) {
+            throw new RuntimeException(e);
+        }
+
+        threadState.memorySegmentCache.release(segment);
     }
 
     @Benchmark
