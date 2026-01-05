@@ -5,7 +5,8 @@
                 "name": "valueSize",
                 "min": 1024
             },
-            "label": "allbig"
+            "label": "allbig",
+            "subselection": ">= 1024"
         },
         {
             "xaxisparam": {
@@ -13,7 +14,8 @@
                 "min": 1,
                 "max": 4096
             },
-            "label": "allsmall"
+            "label": "allsmall",
+            "subselection": "<= 4096"
             # defaults to include_patterns of all matching
         },
         {
@@ -23,7 +25,8 @@
                 "max": 4096
             },
             "exclude_patterns": ["Pooled"],
-            "label": "nopoolsmall"
+            "label": "nopoolsmall",
+            "subselection": "<= 4096 (excluding Pooled)"
         },
         {
             "xaxisparam": {
@@ -31,56 +34,64 @@
                 "min": 1024
             },
             "exclude_patterns": ["Pooled"],
-            "label": "nopoolbig"
+            "label": "nopoolbig",
+            "subselection": ">= 1024 (excluding Pooled)"
         },
         {
             "xaxisparam": {
                 "name": "valueSize"
             },
             "include_patterns": ["ByteArray"],
-            "label": "ba"
+            "label": "ba",
+            "subselection": "Byte Array"
         },
         {
             "xaxisparam": {
                 "name": "valueSize"
             },
             "include_patterns": ["ByteBuf"],
-            "label": "bb"
+            "label": "bb",
+            "subselection": "Byte Buffer"
         },
         {
             "xaxisparam": {
                 "name": "valueSize"
             },
             "include_patterns": ["Direct"],
-            "label": "dir"
+            "label": "dir",
+            "subselection": "Direct"
         },
         {
             "xaxisparam": {
                 "name": "valueSize"
             },
             "include_patterns": ["Indirect"],
-            "label": "ind"
+            "label": "ind",
+            "subselection": "Indirect"
         },
         {
             "xaxisparam": {
                 "name": "valueSize"
             },
             "include_patterns": ["Critical"],
-            "label": "crit"
+            "label": "crit",
+            "subselection": "Critical"
         },
         {
             "xaxisparam": {
                 "name": "valueSize"
             },
             "include_patterns": ["GetElements"],
-            "label": "getelems"
+            "label": "getelems",
+            "subselection": "GetElements"
         },
         {
             "xaxisparam": {
                 "name": "valueSize"
             },
             "include_patterns": ["SetRegion"],
-            "label": "setreg"
+            "label": "setreg",
+            "subselection": "SetRegion"
         }
     ],
     "result.path": "./analysis/testplots"

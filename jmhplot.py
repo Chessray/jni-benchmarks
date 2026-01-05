@@ -193,11 +193,11 @@ def tuple_of_secondary_keys(params: BMParams) -> Tuple:
     return tuple(secondaryKeys)
 
 
-def plot_all_results(params: BMParams, resultSets: ResultSets, path, include_benchmarks: str, exclude_benchmarks: str, label: str) -> None:
+def plot_all_results(params: BMParams, resultSets: ResultSets, path, include_benchmarks: str, exclude_benchmarks: str, label: str, subselection: str) -> None:
     indexKeys = tuple_of_secondary_keys(params)
     for indexTuple, resultSet in resultSets.items():
         plot_result_set(indexKeys, indexTuple, resultSet,
-                        path, include_benchmarks, exclude_benchmarks, label)
+                        path, include_benchmarks, exclude_benchmarks, label, subselection)
 
 
 def plot_result_axis_errorbars(ax, resultSet: ResultSet) -> None:
@@ -256,7 +256,7 @@ def plot_result_axis_bars(ax, resultSet: ResultSet) -> None:
         bmIndex = bmIndex + 1
 
 
-def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, path: pathlib.Path, include_benchmarks: str, exclude_benchmarks: str, label: str):
+def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, path: pathlib.Path, include_benchmarks: str, exclude_benchmarks: str, label: str, subselection: str):
     # Determine how many colors we need
     num_benchmarks = len(resultSet)
 
@@ -274,8 +274,8 @@ def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, p
     plot_result_axis_bars(ax, resultSet)
 
     plt.suptitle("x86_64 - Xeon E5-1650 v3 @ 3.50GHz - 128GB ECC RAM - Ubuntu 24.04.3 LTS - Kernel: 6.14.0-36-generic")
-    plt.title(
-        f'{str(indexKeys)}={str(indexTuple)} include={include_benchmarks} exclude={exclude_benchmarks}')
+    title = f'{str(indexKeys)}={str(indexTuple)} include={include_benchmarks} exclude={exclude_benchmarks} subselection={subselection}'
+    plt.title(title)
     plt.xlabel("# Operations")
     plt.ylabel("t (ns)")
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
@@ -348,6 +348,7 @@ def process_some_plots(path: pathlib.Path, plot: Dict) -> None:
     include_benchmarks = optional('include_patterns', plot)
     exclude_benchmarks = optional('exclude_patterns', plot)
     label = required('label', plot)
+    subselection = optional('subselection', plot)
 
     dataframe = normalize_data_frame_from_path(path)
     if len(dataframe) == 0:
@@ -369,7 +370,7 @@ def process_some_plots(path: pathlib.Path, plot: Dict) -> None:
         extract_params(dataframe), primary_param_name)
     resultSets = extract_results_per_param(dataframe, params)
     plot_all_results(params, resultSets, path,
-                     include_benchmarks, exclude_benchmarks, label)
+                     include_benchmarks, exclude_benchmarks, label, subselection)
 
 
 def process_benchmarks(config: Dict) -> None:
