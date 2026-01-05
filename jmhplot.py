@@ -193,11 +193,11 @@ def tuple_of_secondary_keys(params: BMParams) -> Tuple:
     return tuple(secondaryKeys)
 
 
-def plot_all_results(params: BMParams, resultSets: ResultSets, path, include_benchmarks: str, exclude_benchmarks: str, label: str, subselection: str, system_info: str) -> None:
+def plot_all_results(params: BMParams, xaxisparam:Dict, result_sets: ResultSets, path, include_benchmarks: str, exclude_benchmarks: str, label: str, value_size_title: str, system_info: str) -> None:
     indexKeys = tuple_of_secondary_keys(params)
-    for indexTuple, resultSet in resultSets.items():
-        plot_result_set(indexKeys, indexTuple, resultSet,
-                        path, include_benchmarks, exclude_benchmarks, label, subselection, system_info)
+    for indexTuple, resultSet in result_sets.items():
+        plot_result_set(xaxisparam, indexKeys, indexTuple, resultSet,
+                        path, include_benchmarks, exclude_benchmarks, label, value_size_title, system_info)
 
 
 def plot_result_axis_errorbars(ax, resultSet: ResultSet) -> None:
@@ -256,7 +256,7 @@ def plot_result_axis_bars(ax, resultSet: ResultSet) -> None:
         bmIndex = bmIndex + 1
 
 
-def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, path: pathlib.Path, include_benchmarks: str, exclude_benchmarks: str, label: str, subselection: str, system_info: str):
+def plot_result_set(xaxisparam:Dict, indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, path: pathlib.Path, include_benchmarks: str, exclude_benchmarks: str, label: str, value_size_title: str, system_info: str):
     # Determine how many colors we need
     num_benchmarks = len(resultSet)
 
@@ -274,9 +274,9 @@ def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, p
     plot_result_axis_bars(ax, resultSet)
 
     plt.suptitle(system_info)
-    title = f'{str(indexKeys)}={str(indexTuple)} include={include_benchmarks} exclude={exclude_benchmarks} subselection="{subselection}"'
+    title = f'{str(indexKeys)}={str(indexTuple)} include={include_benchmarks} exclude={exclude_benchmarks} Value Size="{value_size_title}"'
     plt.title(title)
-    plt.xlabel("# Operations")
+    plt.xlabel(extract_parameter_name(xaxisparam))
     plt.ylabel("t (ns)")
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
     plt.grid(visible='True', which='both')
@@ -322,7 +322,7 @@ def filter_for_benchmarks(dataframe: DataFrame, include_benchmarks, exclude_benc
 
 def filter_for_range(dataframe: DataFrame, xaxisparam: Dict) -> DataFrame:
 
-    param_name = required('name', xaxisparam)
+    param_name = extract_parameter_name(xaxisparam)
     xmin = optional('min', xaxisparam, lambda x: int(x))
     xmax = optional('max', xaxisparam, lambda x: int(x))
     if xmax is None and xmin is None:
@@ -340,6 +340,14 @@ def filter_for_range(dataframe: DataFrame, xaxisparam: Dict) -> DataFrame:
         lambda x: int(x) >= xmin and int(x) <= xmax)]
 
 
+def extract_parameter_name(xaxisparam):
+    return required('name', xaxisparam)
+
+
+def default_if_none(optional_string, default_value: str) -> str:
+    return default_value if optional_string is None else optional_string
+
+
 def process_some_plots(path: pathlib.Path, plot: Dict) -> None:
 
     xaxisparam = required('xaxisparam', plot)
@@ -348,7 +356,7 @@ def process_some_plots(path: pathlib.Path, plot: Dict) -> None:
     include_benchmarks = optional('include_patterns', plot)
     exclude_benchmarks = optional('exclude_patterns', plot)
     label = required('label', plot)
-    subselection = optional('subselection', plot)
+    value_size_title = default_if_none(optional('valueSizeTitle', plot), "All")
 
     # Check for system_info.json in the path
     system_info = None
@@ -388,8 +396,8 @@ def process_some_plots(path: pathlib.Path, plot: Dict) -> None:
     params: BMParams = split_params(
         extract_params(dataframe), primary_param_name)
     resultSets = extract_results_per_param(dataframe, params)
-    plot_all_results(params, resultSets, path,
-                     include_benchmarks, exclude_benchmarks, label, subselection, system_info)
+    plot_all_results(params, xaxisparam, resultSets, path,
+                     include_benchmarks, exclude_benchmarks, label, value_size_title, system_info)
 
 
 def process_benchmarks(config: Dict) -> None:
