@@ -15,7 +15,7 @@
                 "max": 4096
             },
             "label": "allsmall",
-            "valueSizeTitle": "<= 4096",
+            "valueSizeTitle": "<= 4096"
             # defaults to include_patterns of all matching
         },
         {

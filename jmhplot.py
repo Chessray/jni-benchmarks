@@ -341,7 +341,7 @@ def filter_for_range(dataframe: DataFrame, xaxisparam: Dict) -> DataFrame:
 
 
 def extract_parameter_name(xaxisparam):
-    return optional('name', xaxisparam)
+    return required('name', xaxisparam)
 
 
 def default_if_none(optional_string, default_value: str) -> str:
