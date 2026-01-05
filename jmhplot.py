@@ -256,6 +256,76 @@ def plot_result_axis_bars(ax, resultSet: ResultSet) -> None:
         bmIndex = bmIndex + 1
 
 
+def get_system_info() -> str:
+    try:
+        import platform
+        import subprocess
+
+        arch = platform.machine()
+        system = platform.system()
+        kernel = platform.release()
+
+        cpu_model = ""
+        ram_info = ""
+        os_info = ""
+
+        if system == "Darwin":
+            try:
+                cpu_model = subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string']).decode().strip()
+            except Exception:
+                cpu_model = platform.processor()
+
+            try:
+                mem_bytes = int(subprocess.check_output(['sysctl', '-n', 'hw.memsize']).decode().strip())
+                ram_info = f"{mem_bytes // (1024**3)}GB RAM"
+            except Exception:
+                ram_info = "Unknown RAM"
+
+            os_info = f"macOS {platform.mac_ver()[0]}"
+
+        elif system == "Linux":
+            try:
+                with open("/proc/cpuinfo", "r") as f:
+                    for line in f:
+                        if "model name" in line:
+                            cpu_model = line.split(":")[1].strip()
+                            break
+            except Exception:
+                cpu_model = platform.processor()
+
+            try:
+                with open("/proc/meminfo", "r") as f:
+                    for line in f:
+                        if "MemTotal" in line:
+                            mem_kb = int(line.split(":")[1].strip().split()[0])
+                            ram_info = f"{mem_kb // (1024**2)}GB RAM"
+                            break
+            except Exception:
+                ram_info = "Unknown RAM"
+
+            try:
+                import lsb_release
+                os_info = lsb_release.get_distro_information()['DESCRIPTION']
+            except Exception:
+                try:
+                    with open("/etc/os-release", "r") as f:
+                        for line in f:
+                            if line.startswith("PRETTY_NAME="):
+                                os_info = line.split("=")[1].strip().strip('"')
+                                break
+                except Exception:
+                    os_info = f"Linux {platform.release()}"
+
+        else:
+            cpu_model = platform.processor()
+            os_info = f"{system} {platform.release()}"
+
+        return f"{arch} - {cpu_model} - {ram_info} - {os_info} - Kernel: {kernel}"
+
+    except Exception as e:
+        return f"Unknown System - {str(e)}"
+
+
 def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, path: pathlib.Path, include_benchmarks: str, exclude_benchmarks: str, label: str, subselection: str):
     # Determine how many colors we need
     num_benchmarks = len(resultSet)
@@ -273,7 +343,7 @@ def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, p
 
     plot_result_axis_bars(ax, resultSet)
 
-    plt.suptitle("x86_64 - Xeon E5-1650 v3 @ 3.50GHz - 128GB ECC RAM - Ubuntu 24.04.3 LTS - Kernel: 6.14.0-36-generic")
+    plt.suptitle(get_system_info())
     title = f'{str(indexKeys)}={str(indexTuple)} include={include_benchmarks} exclude={exclude_benchmarks} subselection={subselection}'
     plt.title(title)
     plt.xlabel("# Operations")
