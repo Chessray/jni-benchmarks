@@ -274,7 +274,7 @@ def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, p
     plot_result_axis_bars(ax, resultSet)
 
     plt.suptitle(system_info)
-    title = f'{str(indexKeys)}={str(indexTuple)} include={include_benchmarks} exclude={exclude_benchmarks} subselection={subselection}'
+    title = f'{str(indexKeys)}={str(indexTuple)} include={include_benchmarks} exclude={exclude_benchmarks} subselection="{subselection}"'
     plt.title(title)
     plt.xlabel("# Operations")
     plt.ylabel("t (ns)")
