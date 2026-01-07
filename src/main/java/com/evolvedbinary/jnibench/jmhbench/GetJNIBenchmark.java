@@ -142,7 +142,7 @@ public class GetJNIBenchmark {
       keyBase = "testKeyWithReturnValueSize" + String.format("%07d", valueSize) + "Bytes";
 
       keyBytes = keyBase.getBytes();
-      keyMemorySegment = arena.allocateArray(ValueLayout.JAVA_BYTE, keyBytes);
+      keyMemorySegment = arena.allocateFrom(ValueLayout.JAVA_BYTE, keyBytes);
 
       readChecksum = AllocationCache.Checksum.valueOf(checksum);
     }

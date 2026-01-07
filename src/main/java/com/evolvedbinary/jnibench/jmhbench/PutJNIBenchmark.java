@@ -126,7 +126,7 @@ public class PutJNIBenchmark {
             benchmarkArena = Arena.ofShared();
 
             keyBytes = keyBase.getBytes();
-            keyMemorySegment = benchmarkArena.allocateArray(ValueLayout.JAVA_BYTE, keyBytes);
+            keyMemorySegment = benchmarkArena.allocateFrom(ValueLayout.JAVA_BYTE, keyBytes);
 
             writePreparation = AllocationCache.Prepare.valueOf(preparation);
         }
