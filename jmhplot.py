@@ -116,8 +116,8 @@ def normalize_data_frame_from_path(path: pathlib.Path):
         except pd.errors.EmptyDataError:
             break
 
-        # every 9th line is the interesting one, discard the rest
-        df = df.iloc[::9, :]
+        # df = df.iloc[::9, :]
+        df = df[~df['Benchmark'].str.contains(':')]
         df["Benchmark"] = df["Benchmark"].apply(lambda x: x.split('.')[-1])
         if normalized is None:
             normalized = df
@@ -257,24 +257,35 @@ def plot_result_axis_bars(ax, resultSet: ResultSet) -> None:
 
 
 def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, path: pathlib.Path, include_benchmarks: str, exclude_benchmarks: str, label: str):
+    # Determine how many colors we need
+    num_benchmarks = len(resultSet)
+
+    # Sample gist_ncar (or nipy_spectral) at discrete intervals
+    cmap = plt.get_cmap('gist_ncar')
+    colors = [cmap(i / num_benchmarks) for i in range(num_benchmarks)]
+
+    # Set the property cycle with these colors
+    plt.rc('axes', prop_cycle=plt.cycler('color', colors))
+
     fig = plt.figure(num=None, figsize=(18, 12), dpi=80,
                      facecolor='w', edgecolor='k')
     ax = plt.subplot()
 
     plot_result_axis_bars(ax, resultSet)
 
+    plt.suptitle("x86_64 - Xeon E5-1650 v3 @ 3.50GHz - 128GB ECC RAM - Ubuntu 24.04.3 LTS - Kernel: 6.14.0-36-generic")
     plt.title(
         f'{str(indexKeys)}={str(indexTuple)} include={include_benchmarks} exclude={exclude_benchmarks}')
-    plt.xlabel("X")
+    plt.xlabel("# Operations")
     plt.ylabel("t (ns)")
-    plt.legend(loc='lower right')
-    plt.grid(b='True', which='both')
+    plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    plt.grid(visible='True', which='both')
 
     name = f'fig_{"_".join([str(t) for t in indexTuple])}_{label}.png'
 
     if path.is_file():
         path = path.parent()
-    fig.savefig(path.joinpath(name))
+    fig.savefig(path.joinpath(name), bbox_inches='tight')
 
 
 alpha_pattern = re.compile(f'[A-Za-z0-9_\-+]')
