@@ -35,6 +35,7 @@ from typing import Dict, List, NewType, Sequence, Tuple
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import pandas as pd
 from pandas.core.frame import DataFrame
 import re
@@ -272,6 +273,12 @@ def plot_result_set(xaxisparam:Dict, indexKeys: Tuple, indexTuple: Tuple, result
     ax = plt.subplot()
 
     plot_result_axis_bars(ax, resultSet)
+
+    # Ensure more marks on the x-axis for log scale
+    ax.xaxis.set_major_locator(ticker.LogLocator(base=10.0, numticks=15))
+    ax.xaxis.set_minor_locator(ticker.LogLocator(base=10.0, subs='auto', numticks=15))
+    ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
+    ax.xaxis.set_minor_formatter(ticker.NullFormatter())
 
     plt.suptitle(system_info)
     title = f'{str(indexKeys)}={str(indexTuple)} include={include_benchmarks} exclude={exclude_benchmarks} Value Size="{value_size_title}"'
