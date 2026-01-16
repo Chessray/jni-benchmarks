@@ -1,18 +1,18 @@
 /**
  * Copyright © 2021, Evolved Binary Ltd
  * All rights reserved.
- *
+ * <p>
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the <organization> nor the
- *       names of its contributors may be used to endorse or promote products
- *       derived from this software without specific prior written permission.
- *
+ * * Redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer.
+ * * Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ * * Neither the name of the <organization> nor the
+ * names of its contributors may be used to endorse or promote products
+ * derived from this software without specific prior written permission.
+ * <p>
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -28,23 +28,31 @@ package com.evolvedbinary.jnibench.jmhbench;
 
 import com.evolvedbinary.jnibench.common.getputjni.GetPutJNI;
 import com.evolvedbinary.jnibench.consbench.NarSystem;
-import com.evolvedbinary.jnibench.jmhbench.cache.*;
-import com.evolvedbinary.jnibench.jmhbench.common.*;
+import com.evolvedbinary.jnibench.jmhbench.cache.AllocationCache;
+import com.evolvedbinary.jnibench.jmhbench.cache.ByteArrayCache;
+import com.evolvedbinary.jnibench.jmhbench.cache.DirectByteBufferCache;
+import com.evolvedbinary.jnibench.jmhbench.cache.IndirectByteBufferCache;
+import com.evolvedbinary.jnibench.jmhbench.cache.NettyByteBufCache;
+import com.evolvedbinary.jnibench.jmhbench.cache.UnsafeBufferCache;
+import com.evolvedbinary.jnibench.jmhbench.common.JMHCaller;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
-import java.lang.foreign.Arena;
-import java.lang.foreign.FunctionDescriptor;
-import java.lang.foreign.Linker;
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.SymbolLookup;
-import java.lang.foreign.ValueLayout;
-import java.lang.invoke.MethodHandle;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
-import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Measurement;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Param;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.Setup;
+import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.TearDown;
+import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
 import org.openjdk.jmh.runner.Runner;
 import org.openjdk.jmh.runner.RunnerException;
@@ -62,373 +70,355 @@ import org.openjdk.jmh.runner.options.OptionsBuilder;
 //@Measurement(iterations = 500, time = 2000, timeUnit = TimeUnit.NANOSECONDS)
 public class PutJNIBenchmark {
 
-    private static final Logger LOG = Logger.getLogger(GetJNIBenchmark.class.getName());
+  private static final Logger LOG = Logger.getLogger(GetJNIBenchmark.class.getName());
 
-    private static final MethodHandle PUT_FROM_MEMORY_SEGMENT_HANDLE;
+  static {
+    NarSystem.loadLibrary();
+  }
 
-    static {
-        NarSystem.loadLibrary();
+  @State(Scope.Benchmark)
+  public static class PutJNIBenchmarkState {
 
-        // 2. Initialize the Linker and Lookup
-        Linker linker = Linker.nativeLinker();
-        SymbolLookup loaderLookup = SymbolLookup.loaderLookup();
+    @Param({
+        "10",
+        "50",
+        "128",
+        "512",
+        "1024",
+        "4096",
+        "8192",
+        "16384",
+        "32768",
+        "65536",
+        "131072"})
+    int valueSize;
 
-        // 3. Find the symbol and create the Downcall Handle once
-        PUT_FROM_MEMORY_SEGMENT_HANDLE = loaderLookup.find("putFromMemorySegment")
-                .map(symbol -> linker.downcallHandle(symbol,
-                        FunctionDescriptor.of(
-                                ValueLayout.JAVA_INT,
-                                ValueLayout.ADDRESS,
-                                ValueLayout.ADDRESS,
-                                ValueLayout.JAVA_INT)))
-                .orElseThrow();
+    @Param({"4", "16"})
+    int cacheMB;
+    final static int MB = 1024 * 1024;
+    @Param({"1024"})
+    int cacheEntryOverhead;
+
+    @Param({"none", "copyin"})
+    String preparation;
+    AllocationCache.Prepare writePreparation;
+
+    @Param({"17"})
+    byte fillByte;
+
+    String keyBase;
+    byte[] keyBytes;
+
+    JMHCaller caller;
+
+    protected final JMHCaller getCaller() {
+      return caller;
     }
 
-    @State(Scope.Benchmark)
-    public static class GetJNIBenchmarkState {
+    @Setup
+    public void setup() {
+      this.caller = JMHCaller.fromStack();
 
-        @Param({
-                "10",
-                "50",
-                "128",
-                "512",
-                "1024",
-                "4096",
-                "8192",
-                "16384",
-                "32768",
-                "65536",
-                "131072"})
-        int valueSize;
+      keyBase = "testKeyWithReturnValueSize" + String.format("%07d", valueSize) + "Bytes";
 
-        @Param({"4", "16"}) int cacheMB;
-        final static int MB = 1024 * 1024;
-        @Param({"1024"}) int cacheEntryOverhead;
+      keyBytes = keyBase.getBytes();
 
-        @Param({"none", "copyin"}) String preparation;
-        AllocationCache.Prepare writePreparation;
+      writePreparation = AllocationCache.Prepare.valueOf(preparation);
+    }
+  }
 
-        @Param({"17"}) byte fillByte;
+  @State(Scope.Thread)
+  public static class PutJNIThreadState {
 
-        String keyBase;
-        byte[] keyBytes;
-        MemorySegment keyMemorySegment;
-        private Arena benchmarkArena;
+    private final DirectByteBufferCache directByteBufferCache = new DirectByteBufferCache();
+    private final UnsafeBufferCache unsafeBufferCache = new UnsafeBufferCache();
+    private final ByteArrayCache byteArrayCache = new ByteArrayCache();
+    private final IndirectByteBufferCache indirectByteBufferCache = new IndirectByteBufferCache();
+    private final PooledByteBufAllocator pooledByteBufAllocator = PooledByteBufAllocator.DEFAULT;
+    private final NettyByteBufCache nettyByteBufCache = new NettyByteBufCache();
 
-        JMHCaller caller;
+    int valueSize;
+    int cacheSize;
 
-        @Setup
-        public void setup() {
-            this.caller = JMHCaller.fromStack();
+    @Setup
+    public void setup(PutJNIBenchmarkState benchmarkState, Blackhole blackhole) {
+      valueSize = benchmarkState.valueSize;
+      cacheSize = benchmarkState.cacheMB * PutJNIBenchmarkState.MB;
 
-            keyBase = "testKeyWithReturnValueSize" + String.format("%07d", valueSize) + "Bytes";
-
-            benchmarkArena = Arena.ofShared();
-
-            keyBytes = keyBase.getBytes();
-            keyMemorySegment = benchmarkArena.allocateFrom(ValueLayout.JAVA_BYTE, keyBytes);
-
-            writePreparation = AllocationCache.Prepare.valueOf(preparation);
-        }
-
-        @TearDown
-        public void tearDown() {
-            if (benchmarkArena != null) {
-                benchmarkArena.close();
-            }
-        }
+      switch (benchmarkState.caller.benchmarkMethod) {
+        case "putFromPooledNettyByteBuf":
+          break;
+        case "putFromNettyByteBuf":
+          nettyByteBufCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead,
+                                  benchmarkState.writePreparation, blackhole);
+          break;
+        case "putFromDirectByteBuffer":
+          directByteBufferCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead,
+                                      benchmarkState.writePreparation, blackhole);
+          break;
+        case "putFromIndirectByteBufferGetRegion":
+        case "putFromIndirectByteBufferGetElements":
+        case "putFromIndirectByteBufferGetCritical":
+          indirectByteBufferCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead,
+                                        benchmarkState.writePreparation, blackhole);
+          break;
+        case "putFromDirectByteBufferFromUnsafe":
+        case "buffersOnlyDirectByteBufferFromUnsafe":
+        case "putFromUnsafe":
+          unsafeBufferCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead,
+                                  benchmarkState.writePreparation, blackhole);
+          break;
+        case "putFromByteArrayGetRegion":
+        case "putFromByteArrayGetElements":
+        case "putFromByteArrayCritical":
+          byteArrayCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead, benchmarkState.writePreparation,
+                               blackhole);
+          break;
+        default:
+          throw new RuntimeException(
+              "Don't know how to setup() for benchmark: " + benchmarkState.caller.benchmarkMethod);
+      }
     }
 
-    @State(Scope.Thread)
-    public static class GetJNIThreadState {
+    @TearDown
+    public void tearDown(PutJNIBenchmarkState benchmarkState) {
 
-        private final DirectByteBufferCache directByteBufferCache = new DirectByteBufferCache();
-        private final UnsafeBufferCache unsafeBufferCache = new UnsafeBufferCache();
-        private final ByteArrayCache byteArrayCache = new ByteArrayCache();
-        private final IndirectByteBufferCache indirectByteBufferCache = new IndirectByteBufferCache();
-        private final MemorySegmentCache memorySegmentCache = new MemorySegmentCache();
-        private final PooledByteBufAllocator pooledByteBufAllocator = PooledByteBufAllocator.DEFAULT;
-        private final NettyByteBufCache nettyByteBufCache = new NettyByteBufCache();
-
-        int valueSize;
-        int cacheSize;
-
-        @Setup
-        public void setup(GetJNIBenchmarkState benchmarkState, Blackhole blackhole) {
-            valueSize = benchmarkState.valueSize;
-            cacheSize = benchmarkState.cacheMB * GetJNIBenchmarkState.MB;
-
-            switch (benchmarkState.caller.benchmarkMethod) {
-                case "putFromPooledNettyByteBuf":
-                    break;
-                case "putFromNettyByteBuf":
-                    nettyByteBufCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead, benchmarkState.writePreparation, blackhole);
-                    break;
-                case "putFromDirectByteBuffer":
-                    directByteBufferCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead, benchmarkState.writePreparation, blackhole);
-                    break;
-                case "putFromIndirectByteBufferGetRegion":
-                case "putFromIndirectByteBufferGetElements":
-                case "putFromIndirectByteBufferGetCritical":
-                    indirectByteBufferCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead, benchmarkState.writePreparation, blackhole);
-                    break;
-                case "putFromDirectByteBufferFromUnsafe":
-                case "buffersOnlyDirectByteBufferFromUnsafe":
-                case "putFromUnsafe":
-                    unsafeBufferCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead, benchmarkState.writePreparation, blackhole);
-                    break;
-                case "putFromByteArrayGetRegion":
-                case "putFromByteArrayGetElements":
-                case "putFromByteArrayCritical":
-                    byteArrayCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead, benchmarkState.writePreparation, blackhole);
-                    break;
-                case "putFromMemorySegment":
-                    memorySegmentCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead, benchmarkState.writePreparation, blackhole);
-                    break;
-                default:
-                    throw new RuntimeException("Don't know how to setup() for benchmark: " + benchmarkState.caller.benchmarkMethod);
-            }
-        }
-
-        @TearDown
-        public void tearDown(GetJNIBenchmarkState benchmarkState) {
-
-            switch (benchmarkState.caller.benchmarkMethod) {
-                case "putFromPooledNettyByteBuf":
-                    break;
-                case "putFromNettyByteBuf":
-                    nettyByteBufCache.tearDown();
-                    break;
-                case "putFromDirectByteBuffer":
-                    directByteBufferCache.tearDown();
-                    break;
-                case "putFromIndirectByteBufferGetRegion":
-                case "putFromIndirectByteBufferGetElements":
-                case "putFromIndirectByteBufferGetCritical":
-                    indirectByteBufferCache.tearDown();
-                    break;
-                case "putFromDirectByteBufferFromUnsafe":
-                case "buffersOnlyDirectByteBufferFromUnsafe":
-                case "putFromUnsafe":
-                    unsafeBufferCache.tearDown();
-                    break;
-                case "putFromByteArrayGetRegion":
-                case "putFromByteArrayGetElements":
-                case "putFromByteArrayCritical":
-                    byteArrayCache.tearDown();
-                    break;
-                case "putFromMemorySegment":
-                    memorySegmentCache.tearDown();
-                    break;
-                default:
-                    throw new RuntimeException("Don't know how to tearDown() for benchmark: " + benchmarkState.caller.benchmarkMethod);
-            }
-        }
+      switch (benchmarkState.caller.benchmarkMethod) {
+        case "putFromPooledNettyByteBuf":
+          break;
+        case "putFromNettyByteBuf":
+          nettyByteBufCache.tearDown();
+          break;
+        case "putFromDirectByteBuffer":
+          directByteBufferCache.tearDown();
+          break;
+        case "putFromIndirectByteBufferGetRegion":
+        case "putFromIndirectByteBufferGetElements":
+        case "putFromIndirectByteBufferGetCritical":
+          indirectByteBufferCache.tearDown();
+          break;
+        case "putFromDirectByteBufferFromUnsafe":
+        case "buffersOnlyDirectByteBufferFromUnsafe":
+        case "putFromUnsafe":
+          unsafeBufferCache.tearDown();
+          break;
+        case "putFromByteArrayGetRegion":
+        case "putFromByteArrayGetElements":
+        case "putFromByteArrayCritical":
+          byteArrayCache.tearDown();
+          break;
+        default:
+          throw new RuntimeException(
+              "Don't know how to tearDown() for benchmark: " + benchmarkState.caller.benchmarkMethod);
+      }
     }
+  }
 
-    //@Benchmark
-    public void buffersOnlyDirectByteBufferFromUnsafe(GetJNIThreadState threadState) {
-        UnsafeBufferCache.UnsafeBuffer unsafeBuffer = threadState.unsafeBufferCache.acquire();
-        threadState.unsafeBufferCache.release(unsafeBuffer);
+  //@Benchmark
+  public void buffersOnlyDirectByteBufferFromUnsafe(PutJNIThreadState threadState) {
+    UnsafeBufferCache.UnsafeBuffer unsafeBuffer = threadState.unsafeBufferCache.acquire();
+    threadState.unsafeBufferCache.release(unsafeBuffer);
+  }
+
+  @Benchmark
+  public void putFromDirectByteBuffer(PutJNIBenchmarkState benchmarkState, PutJNIThreadState threadState,
+                                      Blackhole blackhole) {
+    ByteBuffer byteBuffer = threadState.directByteBufferCache.acquire();
+    byteBuffer.clear();
+    threadState.directByteBufferCache.prepareBuffer(byteBuffer, benchmarkState.fillByte);
+    int size = GetPutJNI.putFromDirectByteBuffer(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length, byteBuffer,
+                                                 benchmarkState.valueSize);
+    blackhole.consume(size);
+    if (size < benchmarkState.valueSize) {
+      throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
     }
+    threadState.directByteBufferCache.release(byteBuffer);
+  }
 
-    @Benchmark
-    public void putFromMemorySegment(GetJNIBenchmarkState benchmarkState, GetJNIThreadState threadState,
-                                     Blackhole blackhole) {
-        final var segment = threadState.memorySegmentCache.acquire();
-        threadState.memorySegmentCache.prepareBuffer(segment, benchmarkState.fillByte);
-
-        try {
-            final var size = (int) PUT_FROM_MEMORY_SEGMENT_HANDLE.invokeExact(
-                    benchmarkState.keyMemorySegment, // Pre-allocated segment for key
-                    segment,
-                    benchmarkState.valueSize
-            );
-            blackhole.consume(size);
-        } catch (Throwable e) {
-            throw new RuntimeException(e);
-        }
-
-        threadState.memorySegmentCache.release(segment);
+  @Benchmark
+  public void putFromUnsafe(PutJNIBenchmarkState benchmarkState, PutJNIThreadState threadState, Blackhole blackhole) {
+    UnsafeBufferCache.UnsafeBuffer unsafeBuffer = threadState.unsafeBufferCache.acquire();
+    threadState.unsafeBufferCache.prepareBuffer(unsafeBuffer, benchmarkState.fillByte);
+    int size = GetPutJNI.putFromUnsafe(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length, unsafeBuffer.handle,
+                                       benchmarkState.valueSize);
+    blackhole.consume(size);
+    if (size < benchmarkState.valueSize) {
+      throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
     }
+    threadState.unsafeBufferCache.release(unsafeBuffer);
+  }
 
-    @Benchmark
-    public void putFromDirectByteBuffer(GetJNIBenchmarkState benchmarkState, GetJNIThreadState threadState, Blackhole blackhole) {
-        ByteBuffer byteBuffer = threadState.directByteBufferCache.acquire();
-        byteBuffer.clear();
-        threadState.directByteBufferCache.prepareBuffer(byteBuffer, benchmarkState.fillByte);
-        int size = GetPutJNI.putFromDirectByteBuffer(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length, byteBuffer, benchmarkState.valueSize);
-        blackhole.consume(size);
-        if (size < benchmarkState.valueSize) {
-            throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
-        }
-        threadState.directByteBufferCache.release(byteBuffer);
+  @Benchmark
+  public void putFromPooledNettyByteBuf(PutJNIBenchmarkState benchmarkState, PutJNIThreadState threadState,
+                                        Blackhole blackhole) {
+    ByteBuf byteBuf = threadState.pooledByteBufAllocator.directBuffer(benchmarkState.valueSize);
+    //TODO prepareBuffer operation - we can use this for the "none" checksum in the meantime.
+
+    int size = GetPutJNI.putFromUnsafe(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length,
+                                       byteBuf.memoryAddress(), benchmarkState.valueSize);
+    blackhole.consume(size);
+    if (size < benchmarkState.valueSize) {
+      throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
     }
+    // Allocated buffer already has retain count of 1
+    byteBuf.release();
+  }
 
-    @Benchmark
-    public void putFromUnsafe(GetJNIBenchmarkState benchmarkState, GetJNIThreadState threadState, Blackhole blackhole) {
-        UnsafeBufferCache.UnsafeBuffer unsafeBuffer = threadState.unsafeBufferCache.acquire();
-        threadState.unsafeBufferCache.prepareBuffer(unsafeBuffer, benchmarkState.fillByte);
-        int size = GetPutJNI.putFromUnsafe(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length, unsafeBuffer.handle, benchmarkState.valueSize);
-        blackhole.consume(size);
-        if (size < benchmarkState.valueSize) {
-            throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
-        }
-        threadState.unsafeBufferCache.release(unsafeBuffer);
+  @Benchmark
+  public void putFromNettyByteBuf(PutJNIBenchmarkState benchmarkState, PutJNIThreadState threadState,
+                                  Blackhole blackhole) {
+    ByteBuf byteBuf = threadState.nettyByteBufCache.acquire();
+    threadState.nettyByteBufCache.prepareBuffer(byteBuf, benchmarkState.fillByte);
+    int size = GetPutJNI.putFromUnsafe(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length,
+                                       byteBuf.memoryAddress(), benchmarkState.valueSize);
+    blackhole.consume(size);
+    if (size < benchmarkState.valueSize) {
+      throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
     }
+    threadState.nettyByteBufCache.release(byteBuf);
+  }
 
-    @Benchmark
-    public void putFromPooledNettyByteBuf(GetJNIBenchmarkState benchmarkState, GetJNIThreadState threadState, Blackhole blackhole) {
-        ByteBuf byteBuf = threadState.pooledByteBufAllocator.directBuffer(benchmarkState.valueSize);
-        //TODO prepareBuffer operation - we can use this for the "none" checksum in the meantime.
-
-        int size = GetPutJNI.putFromUnsafe(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length, byteBuf.memoryAddress(), benchmarkState.valueSize);
-        blackhole.consume(size);
-        if (size < benchmarkState.valueSize) {
-            throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
-        }
-        // Allocated buffer already has retain count of 1
-        byteBuf.release();
+  @Benchmark
+  public void putFromByteArrayGetRegion(PutJNIBenchmarkState benchmarkState, PutJNIThreadState threadState,
+                                        Blackhole blackhole) {
+    byte[] array = threadState.byteArrayCache.acquire();
+    threadState.byteArrayCache.prepareBuffer(array, benchmarkState.fillByte);
+    int size = GetPutJNI.putFromByteArrayGetRegion(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length, array,
+                                                   benchmarkState.valueSize);
+    blackhole.consume(size);
+    if (size < benchmarkState.valueSize) {
+      throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
     }
+    threadState.byteArrayCache.release(array);
+  }
 
-    @Benchmark
-    public void putFromNettyByteBuf(GetJNIBenchmarkState benchmarkState, GetJNIThreadState threadState, Blackhole blackhole) {
-        ByteBuf byteBuf = threadState.nettyByteBufCache.acquire();
-        threadState.nettyByteBufCache.prepareBuffer(byteBuf, benchmarkState.fillByte);
-        int size = GetPutJNI.putFromUnsafe(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length, byteBuf.memoryAddress(), benchmarkState.valueSize);
-        blackhole.consume(size);
-        if (size < benchmarkState.valueSize) {
-            throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
-        }
-        threadState.nettyByteBufCache.release(byteBuf);
+  @Benchmark
+  public void putFromByteArrayGetElements(PutJNIBenchmarkState benchmarkState, PutJNIThreadState threadState,
+                                          Blackhole blackhole) {
+    byte[] array = threadState.byteArrayCache.acquire();
+    threadState.byteArrayCache.prepareBuffer(array, benchmarkState.fillByte);
+    int size = GetPutJNI.putFromByteArrayGetElements(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length, array,
+                                                     benchmarkState.valueSize);
+    blackhole.consume(size);
+    if (size < benchmarkState.valueSize) {
+      throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
     }
+    threadState.byteArrayCache.release(array);
+  }
 
-    @Benchmark
-    public void putFromByteArrayGetRegion(GetJNIBenchmarkState benchmarkState, GetJNIThreadState threadState, Blackhole blackhole) {
-        byte[] array = threadState.byteArrayCache.acquire();
-        threadState.byteArrayCache.prepareBuffer(array, benchmarkState.fillByte);
-        int size = GetPutJNI.putFromByteArrayGetRegion(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length, array, benchmarkState.valueSize);
-        blackhole.consume(size);
-        if (size < benchmarkState.valueSize) {
-            throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
-        }
-        threadState.byteArrayCache.release(array);
+  @Benchmark
+  public void putFromByteArrayCritical(PutJNIBenchmarkState benchmarkState, PutJNIThreadState threadState,
+                                       Blackhole blackhole) {
+    byte[] array = threadState.byteArrayCache.acquire();
+    threadState.byteArrayCache.prepareBuffer(array, benchmarkState.fillByte);
+    int size = GetPutJNI.putFromByteArrayCritical(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length, array,
+                                                  benchmarkState.valueSize);
+    blackhole.consume(size);
+    if (size < benchmarkState.valueSize) {
+      throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
     }
+    threadState.byteArrayCache.release(array);
+  }
 
-    @Benchmark
-    public void putFromByteArrayGetElements(GetJNIBenchmarkState benchmarkState, GetJNIThreadState threadState, Blackhole blackhole) {
-        byte[] array = threadState.byteArrayCache.acquire();
-        threadState.byteArrayCache.prepareBuffer(array, benchmarkState.fillByte);
-        int size = GetPutJNI.putFromByteArrayGetElements(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length, array, benchmarkState.valueSize);
-        blackhole.consume(size);
-        if (size < benchmarkState.valueSize) {
-            throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
-        }
-        threadState.byteArrayCache.release(array);
+  //final supplied buffer(s)
+  //TODO this can be done in as many different ways as supplying a byte[]
+  //But why shouldn't we just expect the same performance as byte[] ?
+  //Start with one instance (one that seems good in the byte[] case), and check for surprises...
+  @Benchmark
+  public void putFromIndirectByteBufferGetRegion(PutJNIBenchmarkState benchmarkState, PutJNIThreadState threadState,
+                                                 Blackhole blackhole) {
+    ByteBuffer byteBuffer = threadState.indirectByteBufferCache.acquire();
+    byteBuffer.clear();
+    threadState.indirectByteBufferCache.prepareBuffer(byteBuffer, benchmarkState.fillByte);
+    int size = GetPutJNI.putFromIndirectByteBufferGetRegion(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length,
+                                                            byteBuffer, benchmarkState.valueSize);
+    blackhole.consume(size);
+    if (size < benchmarkState.valueSize) {
+      throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
     }
+    threadState.indirectByteBufferCache.release(byteBuffer);
+  }
 
-    @Benchmark
-    public void putFromByteArrayCritical(GetJNIBenchmarkState benchmarkState, GetJNIThreadState threadState, Blackhole blackhole) {
-        byte[] array = threadState.byteArrayCache.acquire();
-        threadState.byteArrayCache.prepareBuffer(array, benchmarkState.fillByte);
-        int size = GetPutJNI.putFromByteArrayCritical(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length, array, benchmarkState.valueSize);
-        blackhole.consume(size);
-        if (size < benchmarkState.valueSize) {
-            throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
-        }
-        threadState.byteArrayCache.release(array);
+  @Benchmark
+  public void putFromIndirectByteBufferGetElements(PutJNIBenchmarkState benchmarkState, PutJNIThreadState threadState,
+                                                   Blackhole blackhole) {
+    ByteBuffer byteBuffer = threadState.indirectByteBufferCache.acquire();
+    byteBuffer.clear();
+    threadState.indirectByteBufferCache.prepareBuffer(byteBuffer, benchmarkState.fillByte);
+    int size = GetPutJNI.putFromIndirectByteBufferGetElements(benchmarkState.keyBytes, 0,
+                                                              benchmarkState.keyBytes.length, byteBuffer,
+                                                              benchmarkState.valueSize);
+    blackhole.consume(size);
+    if (size < benchmarkState.valueSize) {
+      throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
     }
+    threadState.indirectByteBufferCache.release(byteBuffer);
+  }
 
-    //final supplied buffer(s)
-    //TODO this can be done in as many different ways as supplying a byte[]
-    //But why shouldn't we just expect the same performance as byte[] ?
-    //Start with one instance (one that seems good in the byte[] case), and check for surprises...
-    @Benchmark
-    public void putFromIndirectByteBufferGetRegion(GetJNIBenchmarkState benchmarkState, GetJNIThreadState threadState, Blackhole blackhole) {
-        ByteBuffer byteBuffer = threadState.indirectByteBufferCache.acquire();
-        byteBuffer.clear();
-        threadState.indirectByteBufferCache.prepareBuffer(byteBuffer, benchmarkState.fillByte);
-        int size = GetPutJNI.putFromIndirectByteBufferGetRegion(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length, byteBuffer, benchmarkState.valueSize);
-        blackhole.consume(size);
-        if (size < benchmarkState.valueSize) {
-            throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
-        }
-        threadState.indirectByteBufferCache.release(byteBuffer);
+  @Benchmark
+  public void putFromIndirectByteBufferGetCritical(PutJNIBenchmarkState benchmarkState, PutJNIThreadState threadState,
+                                                   Blackhole blackhole) {
+    ByteBuffer byteBuffer = threadState.indirectByteBufferCache.acquire();
+    byteBuffer.clear();
+    threadState.indirectByteBufferCache.prepareBuffer(byteBuffer, benchmarkState.fillByte);
+    int size = GetPutJNI.putFromIndirectByteBufferGetCritical(benchmarkState.keyBytes, 0,
+                                                              benchmarkState.keyBytes.length, byteBuffer,
+                                                              benchmarkState.valueSize);
+    blackhole.consume(size);
+    if (size < benchmarkState.valueSize) {
+      throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
     }
+    threadState.indirectByteBufferCache.release(byteBuffer);
+  }
 
-    @Benchmark
-    public void putFromIndirectByteBufferGetElements(GetJNIBenchmarkState benchmarkState, GetJNIThreadState threadState, Blackhole blackhole) {
-        ByteBuffer byteBuffer = threadState.indirectByteBufferCache.acquire();
-        byteBuffer.clear();
-        threadState.indirectByteBufferCache.prepareBuffer(byteBuffer, benchmarkState.fillByte);
-        int size = GetPutJNI.putFromIndirectByteBufferGetElements(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length, byteBuffer, benchmarkState.valueSize);
-        blackhole.consume(size);
-        if (size < benchmarkState.valueSize) {
-            throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
-        }
-        threadState.indirectByteBufferCache.release(byteBuffer);
-    }
+  //create/allocate the result buffers, analogous to the "into" methods (but no unsafe ones here)
+  //TODO getReturnDirectByteBuffer
+  //TODO getReturnIndirectByteBuffer
+  //TODO getReturnByteArrayCritical
+  //TODO getReturnByteArrayGetElements
+  //TODO getReturnByteArraySetRegion
 
-    @Benchmark
-    public void putFromIndirectByteBufferGetCritical(GetJNIBenchmarkState benchmarkState, GetJNIThreadState threadState, Blackhole blackhole) {
-        ByteBuffer byteBuffer = threadState.indirectByteBufferCache.acquire();
-        byteBuffer.clear();
-        threadState.indirectByteBufferCache.prepareBuffer(byteBuffer, benchmarkState.fillByte);
-        int size = GetPutJNI.putFromIndirectByteBufferGetCritical(benchmarkState.keyBytes, 0, benchmarkState.keyBytes.length, byteBuffer, benchmarkState.valueSize);
-        blackhole.consume(size);
-        if (size < benchmarkState.valueSize) {
-            throw new RuntimeException("Put actual " + size + ", requested " + benchmarkState.valueSize);
-        }
-        threadState.indirectByteBufferCache.release(byteBuffer);
-    }
+  //TODO env->NewDirectByteBuffer() - what aree the ownership rules ?
+  //TODO track whether the byte[] copying/sharing methods we are using are doing copies
+  //env->GetByteArrayElements(..., &is_copy)
 
-    //create/allocate the result buffers, analogous to the "into" methods (but no unsafe ones here)
-    //TODO getReturnDirectByteBuffer
-    //TODO getReturnIndirectByteBuffer
-    //TODO getReturnByteArrayCritical
-    //TODO getReturnByteArrayGetElements
-    //TODO getReturnByteArraySetRegion
+  //TODO graphing - dig into the Python stuff a bit more
 
-    //TODO env->NewDirectByteBuffer() - what aree the ownership rules ?
-    //TODO track whether the byte[] copying/sharing methods we are using are doing copies
-    //env->GetByteArrayElements(..., &is_copy)
+  /**
+   * Run from the IDE
+   *
+   * You will need this in the VM args of the run configuration,
+   * in order for NAR to find at runtime the native lib it has built:
+   *
+   * -Djava.library.path=PATH_TO_REPO/target/jni-benchmarks-1.0.0-SNAPSHOT-application/jni-benchmarks-1.0.0-SNAPSHOT/lib
+   *
+   * The parameters we set here configure for debugging,
+   * typically we want a much shorter runs than is needed for accurate benchmarking
+   * SO DON'T TRUST THE NUMBERS GENERATED BY THIS RUN
+   * fork(0) runs everything is in a single process so we don't need to configure JDWP
+   * Again this affects JMH
+   * {@link https://github.com/openjdk/jmh/blob/master/jmh-samples/src/main/java/org/openjdk/jmh/samples/JMHSample_12_Forking.java}
+   * It's a convenience for debugging the tests so that they actually run, that is all.
+   *
+   * @param args
+   * @throws RunnerException
+   */
+  public static void main(String[] args) throws RunnerException {
+    SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy.MM.dd_HH:mm:ss.SSS");
+    Options opt = new OptionsBuilder()
+        .forks(0)
+        .shouldFailOnError(true)
+        .param("preparation", "none", "copyin")
+        .param("valueSize", "50", "1024", "4096", "16384", "65536", "262144")
+        .param("cacheMB", "4")
+        .warmupIterations(10)
+        .measurementIterations(50)
+        .include(PutJNIBenchmark.class.getSimpleName())
+        .result("analysis/testplots/" + simpleDateFormat.format(
+            new Date()) + "_" + GetJNIBenchmark.class.getSimpleName() + ".csv")
+        .build();
 
-    //TODO graphing - dig into the Python stuff a bit more
-
-    /**
-     * Run from the IDE
-     *
-     * You will need this in the VM args of the run configuration,
-     * in order for NAR to find at runtime the native lib it has built:
-     *
-     * -Djava.library.path=PATH_TO_REPO/target/jni-benchmarks-1.0.0-SNAPSHOT-application/jni-benchmarks-1.0.0-SNAPSHOT/lib
-     *
-     * The parameters we set here configure for debugging,
-     * typically we want a much shorter runs than is needed for accurate benchmarking
-     * SO DON'T TRUST THE NUMBERS GENERATED BY THIS RUN
-     * fork(0) runs everything is in a single process so we don't need to configure JDWP
-     * Again this affects JMH
-     * {@link https://github.com/openjdk/jmh/blob/master/jmh-samples/src/main/java/org/openjdk/jmh/samples/JMHSample_12_Forking.java}
-     * It's a convenience for debugging the tests so that they actually run, that is all.
-     *
-     * @param args
-     * @throws RunnerException
-     */
-    public static void main(String[] args) throws RunnerException {
-        SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy.MM.dd_HH:mm:ss.SSS");
-        Options opt = new OptionsBuilder()
-                .forks(0)
-                .shouldFailOnError(true)
-                .param("preparation", "none", "copyin")
-                .param("valueSize", "50", "1024", "4096", "16384", "65536", "262144")
-                .param("cacheMB", "4")
-                .warmupIterations(10)
-                .measurementIterations(50)
-                .include(PutJNIBenchmark.class.getSimpleName())
-                .result("analysis/testplots/" +  simpleDateFormat.format(new Date()) + "_" + GetJNIBenchmark.class.getSimpleName() + ".csv")
-                .build();
-
-        new Runner(opt).run();
-    }
+    new Runner(opt).run();
+  }
 
 }
