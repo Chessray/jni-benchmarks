@@ -1,0 +1,11 @@
+{
+    "plots": [
+        {
+            "xaxisparam": {
+                "name": "keySize",
+            },
+            "label": "all",
+        }
+    ],
+    "result.path": "./analysis/testplots"
+}
