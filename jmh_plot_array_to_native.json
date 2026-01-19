@@ -2,9 +2,9 @@
     "plots": [
         {
             "xaxisparam": {
-                "name": "keySize",
+                "name": "keySize"
             },
-            "label": "all",
+            "label": "all"
         }
     ],
     "result.path": "./analysis/testplots"
