@@ -17,20 +17,28 @@ public class ByteArrayFromNativeBenchmarkJava25 extends ByteArrayFromNativeBench
       Linker linker = Linker.nativeLinker();
       SymbolLookup symbolLookup = SymbolLookup.loaderLookup();
 
-      FunctionDescriptor ffmDescriptor = FunctionDescriptor.of(
-          ValueLayout.JAVA_INT,
-          ValueLayout.ADDRESS,
-          ValueLayout.JAVA_INT,
-          ValueLayout.JAVA_INT,
-          ValueLayout.ADDRESS,
-          ValueLayout.JAVA_INT,
-          ValueLayout.JAVA_INT
-      );
+      var symbolOpt = symbolLookup.find("GetByteArray_getFFM")
+                                  .or(() -> symbolLookup.find("_GetByteArray_getFFM"))  // macOS prefix
+                                  .or(() -> symbolLookup.find("GetByteArray_getFFM@28")); // Windows mangled name
 
-      ffmGetByteArrayHandle = linker.downcallHandle(
-          symbolLookup.find("GetByteArray_getFFM").orElseThrow(),
-          ffmDescriptor
-      );
+      if (symbolOpt.isPresent()) {
+        FunctionDescriptor ffmDescriptor = FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_INT,
+            ValueLayout.JAVA_INT,
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_INT,
+            ValueLayout.JAVA_INT
+        );
+
+        ffmGetByteArrayHandle = linker.downcallHandle(
+            symbolOpt.get(),
+            ffmDescriptor
+        );
+      } else {
+        ffmGetByteArrayHandle = null;
+      }
     } catch (Exception e) {
       System.err.println("FFM Setup failed: " + e.getMessage());
       throw new RuntimeException(e);
