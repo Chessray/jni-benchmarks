@@ -15,8 +15,8 @@ import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
 import org.openjdk.jmh.infra.Blackhole;
 
-public class PutJNIBenchmarkJava25 extends PutJNIBenchmark {
-  private static final MethodHandle PUT_FROM_MEMORY_SEGMENT_HANDLE;
+public class GetJNIBenchmarkJava21 extends GetJNIBenchmark {
+  private static final MethodHandle GET_INTO_MEMORY_SEGMENT_HANDLE;
 
   static {
     // 1. Initialize the Linker and Lookup
@@ -24,7 +24,7 @@ public class PutJNIBenchmarkJava25 extends PutJNIBenchmark {
     SymbolLookup loaderLookup = SymbolLookup.loaderLookup();
 
     // 2. Find the symbol and create the Downcall Handle once
-    PUT_FROM_MEMORY_SEGMENT_HANDLE = loaderLookup.find("putFromMemorySegment")
+    GET_INTO_MEMORY_SEGMENT_HANDLE = loaderLookup.find("getIntoMemorySegment")
                                                  .map(symbol -> linker.downcallHandle(symbol,
                                                                                       FunctionDescriptor.of(
                                                                                           ValueLayout.JAVA_INT,
@@ -36,45 +36,43 @@ public class PutJNIBenchmarkJava25 extends PutJNIBenchmark {
   }
 
   @State(Scope.Benchmark)
-  public static class PutJNIBenchmarkStateJava25 extends PutJNIBenchmarkState {
-    MemorySegment keyMemorySegment;
-    private Arena benchmarkArena;
+  public static class GetJNIBenchmarkStateJava21 extends GetJNIBenchmarkState {
+    private Arena arena;
+    private MemorySegment keyMemorySegment;
 
     @Setup
-    public void setup() {
+    public void setupJava25() {
       super.setup();
-      benchmarkArena = Arena.ofShared();
-      keyMemorySegment = benchmarkArena.allocateArray(ValueLayout.JAVA_BYTE, keyBytes);
+      arena = Arena.ofShared();
+      keyMemorySegment = arena.allocateArray(ValueLayout.JAVA_BYTE, keyBytes);
+
     }
 
     @TearDown
     public void tearDown() {
-      if (benchmarkArena != null) {
-        benchmarkArena.close();
+      if (arena != null) {
+        arena.close();
       }
     }
   }
 
-  public static class PutJNIThreadStateJava25 extends PutJNIThreadState {
-    private final MemorySegmentCache memorySegmentCache = new MemorySegmentCache();
+  @State(Scope.Thread)
+  public static class GetJNIThreadStateJava21 extends GetJNIThreadState {
+    private MemorySegmentCache memorySegmentCache = new MemorySegmentCache();
 
     @Setup
-    public void setup(final PutJNIBenchmarkStateJava25 benchmarkState, final Blackhole blackhole) {
-      if (isPutFromMemorySegmentJava25(benchmarkState)) {
-        memorySegmentCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead,
-                                 benchmarkState.writePreparation, blackhole);
+    public void setup(final GetJNIBenchmarkStateJava21 benchmarkState, final Blackhole blackhole) {
+      if ("getIntoMemorySegment".equals(benchmarkState.getCaller().benchmarkMethod)) {
+        memorySegmentCache.setup(benchmarkState.valueSize, benchmarkState.cacheMB * GetJNIBenchmarkState.MB,
+                                 benchmarkState.cacheEntryOverhead, benchmarkState.readChecksum, blackhole);
       } else {
         super.setup(benchmarkState, blackhole);
       }
     }
 
-    private static boolean isPutFromMemorySegmentJava25(final PutJNIBenchmarkStateJava25 benchmarkState) {
-      return "putFromMemorySegment".equals(benchmarkState.getCaller().benchmarkMethod);
-    }
-
     @TearDown
-    public void tearDown(final PutJNIBenchmarkStateJava25 benchmarkState) {
-      if (isPutFromMemorySegmentJava25(benchmarkState)) {
+    public void tearDown(final GetJNIBenchmarkStateJava21 benchmarkState) {
+      if ("getIntoMemorySegment".equals(benchmarkState.getCaller().benchmarkMethod)) {
         memorySegmentCache.tearDown();
       } else {
         super.tearDown(benchmarkState);
@@ -83,13 +81,12 @@ public class PutJNIBenchmarkJava25 extends PutJNIBenchmark {
   }
 
   @Benchmark
-  public void putFromMemorySegment(PutJNIBenchmarkStateJava25 benchmarkState, PutJNIThreadStateJava25 threadState,
+  public void getIntoMemorySegment(GetJNIBenchmarkStateJava21 benchmarkState, GetJNIThreadStateJava21 threadState,
                                    Blackhole blackhole) {
     final var segment = threadState.memorySegmentCache.acquire();
-    threadState.memorySegmentCache.prepareBuffer(segment, benchmarkState.fillByte);
 
     try {
-      final var size = (int) PUT_FROM_MEMORY_SEGMENT_HANDLE.invokeExact(
+      final var size = (int) GET_INTO_MEMORY_SEGMENT_HANDLE.invokeExact(
           benchmarkState.keyMemorySegment, // Pre-allocated segment for key
           segment,
           benchmarkState.valueSize
@@ -99,6 +96,7 @@ public class PutJNIBenchmarkJava25 extends PutJNIBenchmark {
       throw new RuntimeException(e);
     }
 
+    threadState.memorySegmentCache.checksumBuffer(segment);
     threadState.memorySegmentCache.release(segment);
   }
 }
