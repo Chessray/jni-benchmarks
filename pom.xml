@@ -295,6 +295,7 @@
                                 </goals>
                                 <configuration>
                                     <sources>
+                                        <source>src/main/javafmm</source>
                                         <source>src/main/java21/</source>
                                     </sources>
                                 </configuration>
@@ -339,6 +340,7 @@
                                 </goals>
                                 <configuration>
                                     <sources>
+                                        <source>src/main/javafmm</source>
                                         <source>src/main/java25/</source>
                                     </sources>
                                 </configuration>
