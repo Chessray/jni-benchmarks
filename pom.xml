@@ -296,6 +296,7 @@
                                 <configuration>
                                     <sources>
                                         <source>src/main/java21/</source>
+                                        <source>src/main/javaffm/</source>
                                     </sources>
                                 </configuration>
                             </execution>
@@ -340,6 +341,7 @@
                                 <configuration>
                                     <sources>
                                         <source>src/main/java25/</source>
+                                        <source>src/main/javaffm/</source>
                                     </sources>
                                 </configuration>
                             </execution>
