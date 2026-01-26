@@ -25,6 +25,11 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <jni.h>
+
+#include <algorithm>
+#include <cstring>
+#include <stdexcept>
+
 #include "Iterator.h"
 
 #ifdef __cplusplus
@@ -86,6 +91,32 @@ JNIEXPORT jbyteArray JNICALL Java_com_evolvedbinary_jnibench_common_iterators_Na
 JNIEXPORT void JNICALL Java_com_evolvedbinary_jnibench_common_iterators_NativeIterator_disposeInternal
   (JNIEnv *env, jobject obj, jlong handle) {
     Iterator* iterator = reinterpret_cast<Iterator*>(handle);
+    delete iterator;
+}
+
+extern "C" void* iterator_create(int num_elements, size_t element_size) {
+    return new Iterator(num_elements, element_size);
+}
+
+extern "C" int iterator_has_next(void* handle) {
+    auto* iterator = reinterpret_cast<Iterator*>(handle);
+    return iterator->hasNext() ? 1 : 0;
+}
+
+extern "C" int iterator_next(void* handle, char* dest, int dest_len) {
+    auto* iterator = reinterpret_cast<Iterator*>(handle);
+    try {
+        const auto& data = iterator->next();
+        const int size = std::min(static_cast<int>(data.size()), dest_len);
+        std::memcpy(dest, data.data(), static_cast<size_t>(size));
+        return size;
+    } catch (const std::out_of_range&) {
+        return -1;
+    }
+}
+
+extern "C" void iterator_dispose(void* handle) {
+    auto* iterator = reinterpret_cast<Iterator*>(handle);
     delete iterator;
 }
 
