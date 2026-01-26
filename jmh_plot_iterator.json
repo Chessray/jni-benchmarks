@@ -1,0 +1,11 @@
+{
+    "plots": [
+        {
+            "xaxisparam": {
+                "name": "numElements"
+            },
+            "label": "all"
+        }
+    ],
+    "result.path": "./analysis/testplots"
+}
