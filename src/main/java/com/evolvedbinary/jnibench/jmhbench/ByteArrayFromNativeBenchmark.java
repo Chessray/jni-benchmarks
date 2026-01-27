@@ -40,8 +40,8 @@ import java.util.concurrent.TimeUnit;
  */
 @BenchmarkMode(Mode.SampleTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Warmup(iterations = 100, time = 1000, timeUnit = TimeUnit.NANOSECONDS)
-@Measurement(iterations = 500, time = 2000, timeUnit = TimeUnit.NANOSECONDS)
+@Warmup(iterations = 20, time = 100, timeUnit = TimeUnit.NANOSECONDS)
+@Measurement(iterations = 200, time = 1000, timeUnit = TimeUnit.NANOSECONDS)
 public class ByteArrayFromNativeBenchmark {
 
   static {
@@ -65,11 +65,15 @@ public class ByteArrayFromNativeBenchmark {
     @Param({
         "10",
         "50",
+        "128",
         "512",
         "1024",
         "4096",
+        "8192",
         "16384",
-        "65536"})
+        "32768",
+        "65536",
+        "131072"})
     int valueSize;
 
     /**

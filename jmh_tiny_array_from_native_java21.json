@@ -1,5 +1,5 @@
 {
-    "benchmark": "GetJNIBenchmarkJava21",
+    "benchmark": "ByteArrayFromNativeBenchmarkJava21",
     "jvmargs": ["Xmx4G", "XX:ErrorFile=./results/hs_err_pid%p.log", "XX:+HeapDumpOnOutOfMemoryError", "-enable-preview"],
     "params": {
         "valueSize": [50, 1024, 4096, 16384],

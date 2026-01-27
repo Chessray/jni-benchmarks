@@ -32,19 +32,11 @@ import com.evolvedbinary.jnibench.jmhbench.cache.AllocationCache;
 import com.evolvedbinary.jnibench.jmhbench.cache.ByteArrayCache;
 import com.evolvedbinary.jnibench.jmhbench.cache.DirectByteBufferCache;
 import com.evolvedbinary.jnibench.jmhbench.cache.IndirectByteBufferCache;
-import com.evolvedbinary.jnibench.jmhbench.cache.MemorySegmentCache;
 import com.evolvedbinary.jnibench.jmhbench.cache.NettyByteBufCache;
 import com.evolvedbinary.jnibench.jmhbench.cache.UnsafeBufferCache;
 import com.evolvedbinary.jnibench.jmhbench.common.JMHCaller;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
-import java.lang.foreign.Arena;
-import java.lang.foreign.FunctionDescriptor;
-import java.lang.foreign.Linker;
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.SymbolLookup;
-import java.lang.foreign.ValueLayout;
-import java.lang.invoke.MethodHandle;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -80,24 +72,8 @@ public class GetJNIBenchmark {
 
   private static final Logger LOG = Logger.getLogger(GetJNIBenchmark.class.getName());
 
-  private static final MethodHandle GET_INTO_MEMORY_SEGMENT_HANDLE;
-
   static {
     NarSystem.loadLibrary();
-
-// 2. Initialize the Linker and Lookup
-    Linker linker = Linker.nativeLinker();
-    SymbolLookup loaderLookup = SymbolLookup.loaderLookup();
-
-    // 3. Find the symbol and create the Downcall Handle once
-    GET_INTO_MEMORY_SEGMENT_HANDLE = loaderLookup.find("getIntoMemorySegment")
-                                                 .map(symbol -> linker.downcallHandle(symbol,
-                                                                                      FunctionDescriptor.of(
-                                                                                          ValueLayout.JAVA_INT,
-                                                                                          ValueLayout.ADDRESS,
-                                                                                          ValueLayout.ADDRESS,
-                                                                                          ValueLayout.JAVA_INT)))
-                                                 .orElseThrow();
   }
 
   @State(Scope.Benchmark)
@@ -129,29 +105,20 @@ public class GetJNIBenchmark {
 
     String keyBase;
     byte[] keyBytes;
-    private Arena arena;
-    private MemorySegment keyMemorySegment;
 
     JMHCaller caller;
+
+    protected final JMHCaller getCaller() {
+      return caller;
+    }
 
     @Setup
     public void setup() {
       this.caller = JMHCaller.fromStack();
-      arena = Arena.ofShared();
-
       keyBase = "testKeyWithReturnValueSize" + String.format("%07d", valueSize) + "Bytes";
 
       keyBytes = keyBase.getBytes();
-      keyMemorySegment = arena.allocateArray(ValueLayout.JAVA_BYTE, keyBytes);
-
       readChecksum = AllocationCache.Checksum.valueOf(checksum);
-    }
-
-    @TearDown
-    public void tearDown() {
-      if (arena != null) {
-        arena.close();
-      }
     }
   }
 
@@ -164,7 +131,6 @@ public class GetJNIBenchmark {
     private IndirectByteBufferCache indirectByteBufferCache = new IndirectByteBufferCache();
     private PooledByteBufAllocator pooledByteBufAllocator;
     private NettyByteBufCache nettyByteBufCache = new NettyByteBufCache();
-    private MemorySegmentCache memorySegmentCache = new MemorySegmentCache();
 
     int valueSize;
     int cacheSize;
@@ -207,10 +173,6 @@ public class GetJNIBenchmark {
           byteArrayCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead, benchmarkState.readChecksum,
                                blackhole);
           break;
-        case "getIntoMemorySegment":
-          memorySegmentCache.setup(valueSize, cacheSize, benchmarkState.cacheEntryOverhead, benchmarkState.readChecksum,
-                                   blackhole);
-          break;
         default:
           throw new RuntimeException(
               "Don't know how to setup() for benchmark: " + benchmarkState.caller.benchmarkMethod);
@@ -245,9 +207,6 @@ public class GetJNIBenchmark {
         case "getIntoByteArrayCritical":
           byteArrayCache.tearDown();
           break;
-        case "getIntoMemorySegment":
-          memorySegmentCache.tearDown();
-          break;
         default:
           throw new RuntimeException(
               "Don't know how to tearDown() for benchmark: " + benchmarkState.caller.benchmarkMethod);
@@ -279,26 +238,6 @@ public class GetJNIBenchmark {
                                        benchmarkState.valueSize);
     threadState.unsafeBufferCache.checksumBuffer(unsafeBuffer);
     threadState.unsafeBufferCache.release(unsafeBuffer);
-  }
-
-  @Benchmark
-  public void getIntoMemorySegment(GetJNIBenchmarkState benchmarkState, GetJNIThreadState threadState,
-                                   Blackhole blackhole) {
-    final var segment = threadState.memorySegmentCache.acquire();
-
-    try {
-      final var size = (int) GET_INTO_MEMORY_SEGMENT_HANDLE.invokeExact(
-          benchmarkState.keyMemorySegment, // Pre-allocated segment for key
-          segment,
-          benchmarkState.valueSize
-      );
-      blackhole.consume(size);
-    } catch (Throwable e) {
-      throw new RuntimeException(e);
-    }
-
-    threadState.memorySegmentCache.checksumBuffer(segment);
-    threadState.memorySegmentCache.release(segment);
   }
 
   @Benchmark

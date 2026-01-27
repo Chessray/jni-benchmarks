@@ -50,6 +50,7 @@
 
         <jmh.version>1.36</jmh.version>
         <uberjar.name>benchmarks</uberjar.name>
+        <build-helper-maven-plugin.version>3.6.1</build-helper-maven-plugin.version>
     </properties>
 
     <dependencies>
@@ -282,6 +283,26 @@
             <build>
                 <plugins>
                     <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>${build-helper-maven-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>add-source</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>add-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>src/main/java21/</source>
+                                        <source>src/main/javaffm/</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
                         <artifactId>maven-compiler-plugin</artifactId>
                         <configuration>
                             <compilerArgs>
@@ -304,6 +325,30 @@
                 <java.source.version>25</java.source.version>
                 <java.target.version>25</java.target.version>
             </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>${build-helper-maven-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>add-source</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>add-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>src/main/java25/</source>
+                                        <source>src/main/javaffm/</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 </project>

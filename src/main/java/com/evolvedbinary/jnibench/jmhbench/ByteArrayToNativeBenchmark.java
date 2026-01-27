@@ -41,8 +41,8 @@ import java.util.concurrent.TimeUnit;
  */
 @BenchmarkMode(Mode.SampleTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Warmup(iterations = 100, time = 1000, timeUnit = TimeUnit.NANOSECONDS)
-@Measurement(iterations = 500, time = 2000, timeUnit = TimeUnit.NANOSECONDS)
+@Warmup(iterations = 20, time = 100, timeUnit = TimeUnit.NANOSECONDS)
+@Measurement(iterations = 200, time = 1000, timeUnit = TimeUnit.NANOSECONDS)
 public class ByteArrayToNativeBenchmark {
 
   static {
