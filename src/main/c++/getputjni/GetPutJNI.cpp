@@ -377,6 +377,19 @@ jint Java_com_evolvedbinary_jnibench_common_getputjni_GetPutJNI_getIntoIndirectB
   return get_size;
 }
 
+extern "C" int getIntoMemorySegment(const char* key, char* dest, int dest_len) {
+    std::string value = GetByteArrayInternal(key);
+    int size = std::min((int)value.size(), dest_len);
+    memcpy(dest, value.c_str(), size);
+    return size;
+}
+
+extern "C" int putFromMemorySegment(const char* key, const char* src, int src_len) {
+    char *db_buf = GetByteArrayInternalForWrite(key, src_len);
+    memcpy(db_buf, src, src_len);
+    return src_len;
+}
+
 /*
  * Class:     com_evolvedbinary_jnibench_common_getputjni_GetPutJNI
  * Method:    putFromIndirectByteBufferGetRegion

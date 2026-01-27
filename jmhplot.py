@@ -35,6 +35,7 @@ from typing import Dict, List, NewType, Sequence, Tuple
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import pandas as pd
 from pandas.core.frame import DataFrame
 import re
@@ -193,11 +194,11 @@ def tuple_of_secondary_keys(params: BMParams) -> Tuple:
     return tuple(secondaryKeys)
 
 
-def plot_all_results(params: BMParams, resultSets: ResultSets, path, include_benchmarks: str, exclude_benchmarks: str, label: str) -> None:
+def plot_all_results(params: BMParams, xaxisparam:Dict, result_sets: ResultSets, path, include_benchmarks: str, exclude_benchmarks: str, label: str, value_size_title: str, system_info: str) -> None:
     indexKeys = tuple_of_secondary_keys(params)
-    for indexTuple, resultSet in resultSets.items():
-        plot_result_set(indexKeys, indexTuple, resultSet,
-                        path, include_benchmarks, exclude_benchmarks, label)
+    for indexTuple, resultSet in result_sets.items():
+        plot_result_set(xaxisparam, indexKeys, indexTuple, resultSet,
+                        path, include_benchmarks, exclude_benchmarks, label, value_size_title, system_info)
 
 
 def plot_result_axis_errorbars(ax, resultSet: ResultSet) -> None:
@@ -256,7 +257,7 @@ def plot_result_axis_bars(ax, resultSet: ResultSet) -> None:
         bmIndex = bmIndex + 1
 
 
-def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, path: pathlib.Path, include_benchmarks: str, exclude_benchmarks: str, label: str):
+def plot_result_set(xaxisparam:Dict, indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, path: pathlib.Path, include_benchmarks: str, exclude_benchmarks: str, label: str, value_size_title: str, system_info: str):
     # Determine how many colors we need
     num_benchmarks = len(resultSet)
 
@@ -273,10 +274,16 @@ def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, p
 
     plot_result_axis_bars(ax, resultSet)
 
-    plt.suptitle("x86_64 - Xeon E5-1650 v3 @ 3.50GHz - 128GB ECC RAM - Ubuntu 24.04.3 LTS - Kernel: 6.14.0-36-generic")
-    plt.title(
-        f'{str(indexKeys)}={str(indexTuple)} include={include_benchmarks} exclude={exclude_benchmarks}')
-    plt.xlabel("# Operations")
+    # Ensure more marks on the x-axis for log scale
+    ax.xaxis.set_major_locator(ticker.LogLocator(base=10.0, numticks=15))
+    ax.xaxis.set_minor_locator(ticker.LogLocator(base=10.0, subs='auto', numticks=15))
+    ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
+    ax.xaxis.set_minor_formatter(ticker.NullFormatter())
+
+    plt.suptitle(system_info)
+    title = f'{str(indexKeys)}={str(indexTuple)} include={include_benchmarks} exclude={exclude_benchmarks} Value Size="{value_size_title}"'
+    plt.title(title)
+    plt.xlabel(extract_parameter_name(xaxisparam))
     plt.ylabel("t (ns)")
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
     plt.grid(visible='True', which='both')
@@ -284,7 +291,7 @@ def plot_result_set(indexKeys: Tuple, indexTuple: Tuple, resultSet: ResultSet, p
     name = f'fig_{"_".join([str(t) for t in indexTuple])}_{label}.png'
 
     if path.is_file():
-        path = path.parent()
+        path = path.parent
     fig.savefig(path.joinpath(name), bbox_inches='tight')
 
 
@@ -322,7 +329,7 @@ def filter_for_benchmarks(dataframe: DataFrame, include_benchmarks, exclude_benc
 
 def filter_for_range(dataframe: DataFrame, xaxisparam: Dict) -> DataFrame:
 
-    param_name = required('name', xaxisparam)
+    param_name = extract_parameter_name(xaxisparam)
     xmin = optional('min', xaxisparam, lambda x: int(x))
     xmax = optional('max', xaxisparam, lambda x: int(x))
     if xmax is None and xmin is None:
@@ -340,6 +347,14 @@ def filter_for_range(dataframe: DataFrame, xaxisparam: Dict) -> DataFrame:
         lambda x: int(x) >= xmin and int(x) <= xmax)]
 
 
+def extract_parameter_name(xaxisparam):
+    return required('name', xaxisparam)
+
+
+def default_if_none(optional_string, default_value: str) -> str:
+    return default_value if optional_string is None else optional_string
+
+
 def process_some_plots(path: pathlib.Path, plot: Dict) -> None:
 
     xaxisparam = required('xaxisparam', plot)
@@ -348,6 +363,26 @@ def process_some_plots(path: pathlib.Path, plot: Dict) -> None:
     include_benchmarks = optional('include_patterns', plot)
     exclude_benchmarks = optional('exclude_patterns', plot)
     label = required('label', plot)
+    value_size_title = default_if_none(optional('valueSizeTitle', plot), "All")
+
+    # Check for system_info.json in the path
+    system_info = None
+    system_info_file = None
+    if path.is_dir():
+        system_info_file = path.joinpath('system_info.json')
+    if path.is_file():
+        system_info_file = path.parent.joinpath('system_info.json')
+
+    if system_info_file and system_info_file.exists():
+        try:
+            with system_info_file.open(mode='r', encoding='UTF-8') as f:
+                info_json = json.load(f)
+                system_info = info_json.get('system_info')
+        except Exception:
+            pass
+
+    if system_info is None:
+        system_info = "System Info unavailable"
 
     dataframe = normalize_data_frame_from_path(path)
     if len(dataframe) == 0:
@@ -368,8 +403,8 @@ def process_some_plots(path: pathlib.Path, plot: Dict) -> None:
     params: BMParams = split_params(
         extract_params(dataframe), primary_param_name)
     resultSets = extract_results_per_param(dataframe, params)
-    plot_all_results(params, resultSets, path,
-                     include_benchmarks, exclude_benchmarks, label)
+    plot_all_results(params, xaxisparam, resultSets, path,
+                     include_benchmarks, exclude_benchmarks, label, value_size_title, system_info)
 
 
 def process_benchmarks(config: Dict) -> None:
