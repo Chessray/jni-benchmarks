@@ -55,6 +55,7 @@ public class GetJNIBenchmarkJava25 extends GetJNIBenchmark {
                                                                                       FunctionDescriptor.of(
                                                                                           ValueLayout.JAVA_INT,
                                                                                           ValueLayout.ADDRESS,
+                                                                                          ValueLayout.JAVA_INT,
                                                                                           ValueLayout.ADDRESS,
                                                                                           ValueLayout.JAVA_INT),
                                                                                       Linker.Option.critical(false)))
@@ -115,6 +116,7 @@ public class GetJNIBenchmarkJava25 extends GetJNIBenchmark {
     try {
       final var size = (int) GET_INTO_MEMORY_SEGMENT_HANDLE.invokeExact(
           benchmarkState.keyMemorySegment, // Pre-allocated segment for key
+          benchmarkState.keyBytes.length,
           segment,
           benchmarkState.valueSize
       );
